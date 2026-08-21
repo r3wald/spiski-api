@@ -1,0 +1,376 @@
+openapi: 3.0.0
+info:
+  title: 'Spiski Sync API'
+  description: "Synchronisiert Einkaufslisten und Artikel der Spiski-App zwischen\nGeraeten desselben Nutzers. Es gibt keinen klassischen Account:\ndie Authentifizierung erfolgt ueber eine client-generierte\nAccount-UUID als Bearer-Token.\n\nAlle Zeitstempel sind ISO-8601 in UTC mit Millisekunden\n(`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins\nueber `(updatedAt, clientId)` aufgeloest.\n"
+  version: 1.0.0
+servers:
+  -
+    url: /
+    description: 'Aktuelle Instanz'
+paths:
+  /v1/me:
+    delete:
+      tags:
+        - Account
+      summary: 'Alle Daten des Nutzers loeschen'
+      description: "Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf\nLoeschung). Derselbe Bearer-Token legt beim naechsten Request einen\nleeren Account an; der Client muss seinen `lastSyncCursor`\ngleichzeitig lokal auf 0 zuruecksetzen."
+      operationId: delete_v1_me_delete
+      responses:
+        '204':
+          description: Geloescht
+        '401':
+          description: 'Bearer-Token fehlt oder ist keine UUID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/health:
+    get:
+      tags:
+        - System
+      summary: Health-Check
+      operationId: get_v1_health
+      responses:
+        '200':
+          description: 'Anwendung und Datenbank erreichbar'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: 'Datenbank nicht erreichbar'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+      security: []
+  /v1/sync:
+    post:
+      tags:
+        - Sync
+      summary: 'Lokale Aenderungen hochladen und fremde abholen'
+      description: "Push und Pull in einem Request, serverseitig in einer Transaktion.\n\nAblauf: eingehende Zeilen werden per Last-Write-Wins ueber\n`(updatedAt, clientId)` gegen den Serverstand gehalten, akzeptierte\nZeilen bekommen eine neue `serverVersion`. Danach liefert die Antwort\nalle Zeilen mit `serverVersion > since` – plus den Serverstand jeder\ngepushten Zeile, auch der abgelehnten."
+      operationId: post_v1_sync
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+      responses:
+        '200':
+          description: 'Merge-Ergebnis und Pull-Fenster'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          description: 'JSON kaputt oder Pflichtfeld fehlt'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: 'Bearer-Token fehlt oder ist keine UUID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '413':
+          description: 'Body groesser als 1 MiB oder mehr als 500 Push-Zeilen'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: '"since" oder "limit" ausserhalb des zulaessigen Bereichs'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: 'Rate Limit erreicht, siehe Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    Problem:
+      description: 'Fehlerdarstellung nach RFC 9457.'
+      required:
+        - type
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          format: uri
+          example: 'https://spiski.app/problems/rate-limited'
+        title:
+          type: string
+          example: 'Too Many Requests'
+        status:
+          type: integer
+          example: 429
+        detail:
+          type: string
+          example: 'Sync-Limit erreicht.'
+      type: object
+    ListChange:
+      description: 'Eine vom Client gepushte Listen-Zeile.'
+      required:
+        - id
+        - name
+        - color
+        - sortOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+        color:
+          description: 'ARGB aus Flutters Color.toARGB32(), vorzeichenlos 32 Bit.'
+          type: integer
+          format: int64
+          maximum: 4294967295
+          minimum: 0
+        sortOrder:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          description: "Entscheidet den Last-Write-Wins-Vergleich. Werte mehr als fuenf Minuten in der Zukunft werden serverseitig gekappt.\n"
+          type: string
+          format: date-time
+        deletedAt:
+          description: 'Gesetzt = Tombstone. Es gibt keinen separaten Delete-Endpoint.'
+          type: string
+          format: date-time
+          nullable: true
+      type: object
+    ItemChange:
+      description: 'Eine vom Client gepushte Artikel-Zeile.'
+      required:
+        - id
+        - listId
+        - name
+        - sortOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        listId:
+          description: 'Muss zu einer Liste desselben Nutzers gehoeren, sonst `unknown_list`.'
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+        unit:
+          type: string
+          maxLength: 20
+          nullable: true
+        isChecked:
+          type: boolean
+          default: false
+        note:
+          type: string
+          maxLength: 500
+          nullable: true
+        sortOrder:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        movedAt:
+          type: string
+          format: date-time
+          nullable: true
+      type: object
+    ListState:
+      description: 'Der autoritative Serverstand einer Liste.'
+      allOf:
+        -
+          $ref: '#/components/schemas/ListChange'
+        -
+          required:
+            - serverVersion
+          properties:
+            serverVersion:
+              type: integer
+              format: int64
+          type: object
+    ItemState:
+      description: 'Der autoritative Serverstand eines Artikels.'
+      allOf:
+        -
+          $ref: '#/components/schemas/ItemChange'
+        -
+          required:
+            - serverVersion
+          properties:
+            serverVersion:
+              type: integer
+              format: int64
+          type: object
+    PushResult:
+      description: 'Rueckmeldung zu genau einer gepushten Zeile.'
+      required:
+        - id
+        - accepted
+      properties:
+        id:
+          type: string
+          format: uuid
+        accepted:
+          type: boolean
+        reason:
+          description: 'Nur bei `accepted = false` gesetzt.'
+          type: string
+          enum:
+            - stale
+            - unknown_list
+            - invalid
+            - quota_exceeded
+      type: object
+    SyncRequest:
+      required:
+        - since
+        - clientId
+      properties:
+        since:
+          description: "Zuletzt gesehener `serverCursor`. Liegt der Wert ueber dem Serverstand, antwortet der Server mit `fullResync = true`.\n"
+          type: integer
+          format: int64
+          minimum: 0
+        clientId:
+          description: "Installations-UUID des Geraets, nicht die Account-UUID. Dient als Tiebreaker bei identischem `updatedAt` und wird beim Koppeln eines Zweitgeraets NICHT uebertragen.\n"
+          type: string
+          format: uuid
+        limit:
+          description: 'Maximale Zeilenzahl im Pull-Fenster.'
+          type: integer
+          default: 500
+          maximum: 1000
+          minimum: 1
+        changes:
+          description: 'Zusammen hoechstens 500 Zeilen, Body hoechstens 1 MiB.'
+          properties:
+            lists:
+              type: array
+              items:
+                $ref: '#/components/schemas/ListChange'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemChange'
+          type: object
+      type: object
+    SyncResponse:
+      required:
+        - serverCursor
+        - hasMore
+        - fullResync
+        - changes
+        - pushResults
+      properties:
+        serverCursor:
+          description: 'Wert fuer `since` im naechsten Request.'
+          type: integer
+          format: int64
+        hasMore:
+          description: 'Das Pull-Fenster wurde gekuerzt; sofort erneut syncen.'
+          type: boolean
+        fullResync:
+          description: "Der gesendete `since` lag ueber dem Serverstand. Der Client verwirft nach vollstaendigem Durchlauf alle lokalen Zeilen, die nicht geliefert wurden.\n"
+          type: boolean
+        changes:
+          description: "Autoritativer Serverstand. Enthaelt das Pull-Fenster und zusaetzlich jede gepushte Zeile, auch abgelehnte. Listen sind vor Artikeln anzuwenden.\n"
+          required:
+            - lists
+            - items
+          properties:
+            lists:
+              type: array
+              items:
+                $ref: '#/components/schemas/ListState'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ItemState'
+          type: object
+        pushResults:
+          required:
+            - lists
+            - items
+          properties:
+            lists:
+              type: array
+              items:
+                $ref: '#/components/schemas/PushResult'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/PushResult'
+          type: object
+      type: object
+    Health:
+      required:
+        - status
+        - database
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - degraded
+        database:
+          type: string
+          enum:
+            - up
+            - down
+      type: object
+  securitySchemes:
+    AccountUuid:
+      type: http
+      description: 'Die client-generierte Account-UUID (UUIDv4).'
+      bearerFormat: UUID
+      scheme: bearer
+security:
+  -
+    AccountUuid: []
+tags:
+  -
+    name: Sync
+    description: 'Push und Pull in einem Request.'
+  -
+    name: Account
+    description: 'Verwaltung der Nutzerdaten.'
+  -
+    name: System
+

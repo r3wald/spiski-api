@@ -1,0 +1,15 @@
+parameters:
+    level: 6
+    paths:
+        - bin/
+        - config/
+        - public/
+        - src/
+        - tests/
+
+    ignoreErrors:
+        # getAllowedEnvs() gehoert zum Skeleton und wird vom Symfony-Runtime
+        # ueber Reflection aufgerufen, nicht aus dem Anwendungscode.
+        -
+            identifier: method.unused
+            path: src/Kernel.php

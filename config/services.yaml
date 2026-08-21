@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
+
+parameters:
+
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    App\:
+        resource: '../src/'
+        exclude:
+            - '../src/Doctrine/'
+            - '../src/Entity/'
+            - '../src/Exception/'
+            - '../src/Kernel.php'
+            - '../src/Sync/Dto/'
+            - '../src/Sync/MergeDecision.php'
+            - '../src/Sync/SyncLimits.php'
+
+    App\Sync\ClockSkewGuard:
+        arguments:
+            $toleranceSeconds: '%env(int:SPISKI_CLOCK_SKEW_TOLERANCE)%'
+
+    App\EventListener\ApiExceptionListener:
+        arguments:
+            $debug: '%kernel.debug%'

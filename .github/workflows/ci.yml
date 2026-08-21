@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Tests, Analyse und OpenAPI-Diff
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: spiski
+          POSTGRES_USER: spiski
+          POSTGRES_PASSWORD: spiski
+          TZ: UTC
+          PGTZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spiski -d spiski"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Echte Umgebungsvariable und damit staerker als .env.test – hier gewollt,
+      # weil der Postgres-Service unter 127.0.0.1 statt unter einem Compose-Namen
+      # erreichbar ist. APP_ENV wird bewusst NICHT gesetzt, das steuert PHPUnit.
+      DATABASE_URL: postgresql://spiski:spiski@127.0.0.1:5432/spiski?serverVersion=18&charset=utf8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: pdo_pgsql, intl, zip, apcu
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer-Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Abhaengigkeiten installieren
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Statische Analyse
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress
+
+      - name: Tests
+        run: vendor/bin/phpunit
+
+      - name: OpenAPI-Spec gegen den Code pruefen
+        run: |
+          php bin/console nelmio:apidoc:dump --format=yaml --no-pretty > /tmp/openapi.generated.yaml 2>/dev/null
+          if ! diff -u openapi.yaml /tmp/openapi.generated.yaml; then
+            echo "::error::openapi.yaml ist nicht mehr aktuell. Bitte 'make openapi' ausfuehren und committen."
+            exit 1
+          fi
+        env:
+          APP_ENV: dev
+
+      - name: Backup-Skript pruefen
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck bin/backup.sh

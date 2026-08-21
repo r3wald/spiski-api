@@ -1,0 +1,29 @@
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	root * /app/public
+
+	encode gzip
+
+	# HSTS ist Pflicht, sobald echtes TLS davor haengt (CLAUDE.md 6). Lokal ueber
+	# HTTP schadet der Header nicht, weil Browser ihn nur ueber HTTPS auswerten.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	php_fastcgi php:9000 {
+		root /app/public
+	}
+
+	file_server
+
+	log {
+		output stdout
+		format console
+	}
+}

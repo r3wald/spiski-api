@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="0d3d4a9b-bdb1-4a4b-b0d0-ac75943119da" />
+    <option name="openSessionIds">
+      <list>
+        <option value="91f8a561-5842-4ffa-b72e-64712022d2ea" />
+        <option value="e5853b39-35c0-4877-a232-16e1ba7f684f" />
+        <option value="0d3d4a9b-bdb1-4a4b-b0d0-ac75943119da" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="0d3d4a9b-bdb1-4a4b-b0d0-ac75943119da" value="/sessions/1915fd05-cb8f-4fb1-9f3e-d01dccf3394d" />
+        <entry key="91f8a561-5842-4ffa-b72e-64712022d2ea" value="/sessions/522aea77-d61e-4acb-8098-b0c16a031abb" />
+        <entry key="e5853b39-35c0-4877-a232-16e1ba7f684f" value="/sessions/0d164131-ef58-4e29-a88b-d20d9dcc64ec" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="0d3d4a9b-bdb1-4a4b-b0d0-ac75943119da" value="Schau Dir CLAUDE.md an. Ist alles vollständig für" />
+        <entry key="91f8a561-5842-4ffa-b72e-64712022d2ea" value="Schau Dir CLAUDE.md an. Was fehlt für eine erfolgr" />
+        <entry key="e5853b39-35c0-4877-a232-16e1ba7f684f" value="Ist die Beschreibung in CLAUDE.md ausreichend für" />
+      </map>
+    </option>
+  </component>
+</project>

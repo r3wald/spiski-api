@@ -1,0 +1,7 @@
+# Nur im dev-Environment. Die Spezifikation liegt als openapi.yaml versioniert
+# im Repo; produktiv muss die API dafuer keine zusaetzliche Route anbieten.
+when@dev:
+    app.swagger:
+        path: /api/doc.json
+        methods: GET
+        defaults: { _controller: nelmio_api_doc.controller.swagger }

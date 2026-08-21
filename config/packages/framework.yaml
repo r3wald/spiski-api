@@ -1,0 +1,11 @@
+# see https://symfony.com/doc/current/reference/configuration/framework.html
+framework:
+    secret: '%env(APP_SECRET)%'
+
+    # Reines API-Backend: keine Sessions, keine Cookies. Die Firewalls sind
+    # stateless, der Bearer-Token ist der einzige Zustand.
+    session: false
+
+when@test:
+    framework:
+        test: true

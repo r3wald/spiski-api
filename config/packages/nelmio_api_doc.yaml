@@ -1,0 +1,207 @@
+nelmio_api_doc:
+    documentation:
+        openapi: 3.0.0
+        info:
+            title: Spiski Sync API
+            description: |
+                Synchronisiert Einkaufslisten und Artikel der Spiski-App zwischen
+                Geraeten desselben Nutzers. Es gibt keinen klassischen Account:
+                die Authentifizierung erfolgt ueber eine client-generierte
+                Account-UUID als Bearer-Token.
+
+                Alle Zeitstempel sind ISO-8601 in UTC mit Millisekunden
+                (`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins
+                ueber `(updatedAt, clientId)` aufgeloest.
+            version: 1.0.0
+        servers:
+            - url: /
+              description: Aktuelle Instanz
+        tags:
+            - name: Sync
+              description: Push und Pull in einem Request.
+            - name: Account
+              description: Verwaltung der Nutzerdaten.
+            - name: System
+        components:
+            securitySchemes:
+                AccountUuid:
+                    type: http
+                    scheme: bearer
+                    bearerFormat: UUID
+                    description: Die client-generierte Account-UUID (UUIDv4).
+            schemas:
+                Problem:
+                    type: object
+                    description: Fehlerdarstellung nach RFC 9457.
+                    properties:
+                        type: { type: string, format: uri, example: 'https://spiski.app/problems/rate-limited' }
+                        title: { type: string, example: 'Too Many Requests' }
+                        status: { type: integer, example: 429 }
+                        detail: { type: string, example: 'Sync-Limit erreicht.' }
+                    required: [type, title, status, detail]
+
+                ListChange:
+                    type: object
+                    description: Eine vom Client gepushte Listen-Zeile.
+                    properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string, minLength: 1, maxLength: 100 }
+                        color:
+                            type: integer
+                            format: int64
+                            minimum: 0
+                            maximum: 4294967295
+                            description: ARGB aus Flutters Color.toARGB32(), vorzeichenlos 32 Bit.
+                        sortOrder: { type: integer, format: int32 }
+                        createdAt: { type: string, format: date-time }
+                        updatedAt:
+                            type: string
+                            format: date-time
+                            description: >
+                                Entscheidet den Last-Write-Wins-Vergleich. Werte mehr als
+                                fuenf Minuten in der Zukunft werden serverseitig gekappt.
+                        deletedAt:
+                            type: [string, 'null']
+                            format: date-time
+                            description: Gesetzt = Tombstone. Es gibt keinen separaten Delete-Endpoint.
+                    required: [id, name, color, sortOrder, createdAt, updatedAt]
+
+                ItemChange:
+                    type: object
+                    description: Eine vom Client gepushte Artikel-Zeile.
+                    properties:
+                        id: { type: string, format: uuid }
+                        listId:
+                            type: string
+                            format: uuid
+                            description: Muss zu einer Liste desselben Nutzers gehoeren, sonst `unknown_list`.
+                        name: { type: string, minLength: 1, maxLength: 200 }
+                        quantity: { type: [number, 'null'], format: double, minimum: 0 }
+                        unit: { type: [string, 'null'], maxLength: 20 }
+                        isChecked: { type: boolean, default: false }
+                        note: { type: [string, 'null'], maxLength: 500 }
+                        sortOrder: { type: integer, format: int32 }
+                        createdAt: { type: string, format: date-time }
+                        updatedAt: { type: string, format: date-time }
+                        deletedAt: { type: [string, 'null'], format: date-time }
+                        movedAt: { type: [string, 'null'], format: date-time }
+                    required: [id, listId, name, sortOrder, createdAt, updatedAt]
+
+                ListState:
+                    description: Der autoritative Serverstand einer Liste.
+                    allOf:
+                        - $ref: '#/components/schemas/ListChange'
+                        - type: object
+                          properties:
+                              serverVersion: { type: integer, format: int64 }
+                          required: [serverVersion]
+
+                ItemState:
+                    description: Der autoritative Serverstand eines Artikels.
+                    allOf:
+                        - $ref: '#/components/schemas/ItemChange'
+                        - type: object
+                          properties:
+                              serverVersion: { type: integer, format: int64 }
+                          required: [serverVersion]
+
+                PushResult:
+                    type: object
+                    description: Rueckmeldung zu genau einer gepushten Zeile.
+                    properties:
+                        id: { type: string, format: uuid }
+                        accepted: { type: boolean }
+                        reason:
+                            type: string
+                            enum: [stale, unknown_list, invalid, quota_exceeded]
+                            description: Nur bei `accepted = false` gesetzt.
+                    required: [id, accepted]
+
+                SyncRequest:
+                    type: object
+                    properties:
+                        since:
+                            type: integer
+                            format: int64
+                            minimum: 0
+                            description: >
+                                Zuletzt gesehener `serverCursor`. Liegt der Wert ueber dem
+                                Serverstand, antwortet der Server mit `fullResync = true`.
+                        clientId:
+                            type: string
+                            format: uuid
+                            description: >
+                                Installations-UUID des Geraets, nicht die Account-UUID. Dient
+                                als Tiebreaker bei identischem `updatedAt` und wird beim
+                                Koppeln eines Zweitgeraets NICHT uebertragen.
+                        limit:
+                            type: integer
+                            minimum: 1
+                            maximum: 1000
+                            default: 500
+                            description: Maximale Zeilenzahl im Pull-Fenster.
+                        changes:
+                            type: object
+                            description: Zusammen hoechstens 500 Zeilen, Body hoechstens 1 MiB.
+                            properties:
+                                lists:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/ListChange' }
+                                items:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/ItemChange' }
+                    required: [since, clientId]
+
+                SyncResponse:
+                    type: object
+                    properties:
+                        serverCursor:
+                            type: integer
+                            format: int64
+                            description: Wert fuer `since` im naechsten Request.
+                        hasMore:
+                            type: boolean
+                            description: Das Pull-Fenster wurde gekuerzt; sofort erneut syncen.
+                        fullResync:
+                            type: boolean
+                            description: >
+                                Der gesendete `since` lag ueber dem Serverstand. Der Client
+                                verwirft nach vollstaendigem Durchlauf alle lokalen Zeilen,
+                                die nicht geliefert wurden.
+                        changes:
+                            type: object
+                            description: >
+                                Autoritativer Serverstand. Enthaelt das Pull-Fenster und
+                                zusaetzlich jede gepushte Zeile, auch abgelehnte. Listen sind
+                                vor Artikeln anzuwenden.
+                            properties:
+                                lists:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/ListState' }
+                                items:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/ItemState' }
+                            required: [lists, items]
+                        pushResults:
+                            type: object
+                            properties:
+                                lists:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/PushResult' }
+                                items:
+                                    type: array
+                                    items: { $ref: '#/components/schemas/PushResult' }
+                            required: [lists, items]
+                    required: [serverCursor, hasMore, fullResync, changes, pushResults]
+
+                Health:
+                    type: object
+                    properties:
+                        status: { type: string, enum: [ok, degraded] }
+                        database: { type: string, enum: [up, down] }
+                    required: [status, database]
+        security:
+            - AccountUuid: []
+    areas:
+        path_patterns:
+            - ^/v1

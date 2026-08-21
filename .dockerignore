@@ -1,0 +1,20 @@
+# vendor/ kommt aus dem composer-install-Layer, nicht vom Host – sonst landet
+# der dev-Stand inklusive Dev-Abhaengigkeiten im prod-Image.
+vendor/
+var/
+
+# Enthalten personenbezogene Daten und haben in keinem Image etwas zu suchen.
+backups/
+
+.git/
+.github/
+.idea/
+.phpunit.cache/
+tests/
+phpunit.dist.xml
+phpstan.dist.neon
+Makefile
+compose.yaml
+
+.env.local
+.env.*.local

@@ -1,0 +1,27 @@
+security:
+    # Kein Passwort-Hashing: die Account-UUID *ist* das Secret (CLAUDE.md 6),
+    # es gibt keine Credentials, die gehasht werden koennten.
+    providers:
+        spiski:
+            id: App\Security\UserProvider
+
+    firewalls:
+        health:
+            pattern: ^/v1/health$
+            security: false
+
+        docs:
+            pattern: ^/(api/doc|_profiler|_wdt)
+            security: false
+
+        api:
+            pattern: ^/
+            stateless: true
+            provider: spiski
+            custom_authenticators:
+                - App\Security\UuidBearerAuthenticator
+            entry_point: App\Security\UuidBearerAuthenticator
+
+    access_control:
+        - { path: ^/v1/health$, roles: PUBLIC_ACCESS }
+        - { path: ^/v1/, roles: ROLE_USER }

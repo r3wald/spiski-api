@@ -1,0 +1,30 @@
+framework:
+    rate_limiter:
+        # Pro Account-UUID. Deckt normales Polling plus Debounce-Bursts ab und
+        # bremst gleichzeitig Enumerations-/Abuse-Versuche (CLAUDE.md 6).
+        sync:
+            policy: sliding_window
+            limit: 60
+            interval: '1 minute'
+
+        # Pro IP, und zwar nur fuer das *Anlegen* bisher unbekannter Accounts.
+        # Ohne diese Grenze laesst sich die Tabelle app_user trivial fluten,
+        # weil jede valide UUID beim ersten Kontakt einen Datensatz erzeugt.
+        account_creation:
+            policy: fixed_window
+            limit: 20
+            interval: '1 hour'
+
+when@test:
+    framework:
+        rate_limiter:
+            # In Tests praktisch abgeschaltet; die Limiter haben eigene Tests,
+            # die die Grenzen per Konfiguration gezielt herunterdrehen.
+            sync:
+                policy: sliding_window
+                limit: 10000
+                interval: '1 minute'
+            account_creation:
+                policy: fixed_window
+                limit: 10000
+                interval: '1 hour'

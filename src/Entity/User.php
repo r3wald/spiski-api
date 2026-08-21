@@ -1,0 +1,87 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Entity;
+
+use App\Doctrine\DateTimeMsType;
+use App\Repository\UserRepository;
+use Doctrine\DBAL\Types\Types;
+use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Types\UuidType;
+use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Component\Uid\Uuid;
+
+/**
+ * Anker fuer die Zuordnung von Listen und Artikeln. Kein Login, keine
+ * personenbezogenen Felder – die ID ist die client-generierte Account-UUID und
+ * zugleich das einzige Secret (CLAUDE.md 6).
+ */
+#[ORM\Entity(repositoryClass: UserRepository::class)]
+#[ORM\Table(name: 'app_user')]
+class User implements UserInterface
+{
+    #[ORM\Id]
+    #[ORM\Column(type: UuidType::NAME)]
+    private Uuid $id;
+
+    /** Monotoner Sync-Zaehler dieses Nutzers (CLAUDE.md 5.2). */
+    #[ORM\Column(type: Types::BIGINT, options: ['default' => 0])]
+    private int $versionCounter = 0;
+
+    #[ORM\Column(type: DateTimeMsType::NAME)]
+    private \DateTimeImmutable $createdAt;
+
+    #[ORM\Column(type: DateTimeMsType::NAME)]
+    private \DateTimeImmutable $lastSeenAt;
+
+    public function __construct(Uuid $id, \DateTimeImmutable $now)
+    {
+        $this->id = $id;
+        $this->createdAt = $now;
+        $this->lastSeenAt = $now;
+    }
+
+    public function getId(): Uuid
+    {
+        return $this->id;
+    }
+
+    public function getVersionCounter(): int
+    {
+        return $this->versionCounter;
+    }
+
+    public function setVersionCounter(int $counter): void
+    {
+        $this->versionCounter = $counter;
+    }
+
+    public function getCreatedAt(): \DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getLastSeenAt(): \DateTimeImmutable
+    {
+        return $this->lastSeenAt;
+    }
+
+    public function setLastSeenAt(\DateTimeImmutable $lastSeenAt): void
+    {
+        $this->lastSeenAt = $lastSeenAt;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function getRoles(): array
+    {
+        return ['ROLE_USER'];
+    }
+
+    public function getUserIdentifier(): string
+    {
+        return $this->id->toRfc4122();
+    }
+}

@@ -1,0 +1,76 @@
+services:
+  php:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+      - composer_cache:/tmp/composer
+    # APP_ENV und DATABASE_URL werden hier bewusst NICHT gesetzt. Echte
+    # Umgebungsvariablen haben in Symfony Vorrang vor .env-Dateien; sie wuerden
+    # .env.test aushebeln und den Testlauf auf die Entwicklungsdatenbank lenken –
+    # die er zwischen den Tests per TRUNCATE leert.
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./public:/app/public:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - php
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: spiski
+      POSTGRES_USER: spiski
+      POSTGRES_PASSWORD: spiski
+      # Deterministische Zeitzone: alle TIMESTAMPTZ-Werte werden in UTC gehalten.
+      TZ: UTC
+      PGTZ: UTC
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spiski -d spiski"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      # PostgreSQL 18 legt die Daten in ein versionsspezifisches Unterverzeichnis;
+      # der Mount gehoert deshalb auf /var/lib/postgresql, nicht auf .../data.
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  # Eigene Instanz fuer Tests. Daten liegen in tmpfs: schnell und garantiert
+  # leer nach jedem Neustart, damit ein abgebrochener Testlauf nichts hinterlaesst.
+  postgres_test:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: spiski
+      POSTGRES_USER: spiski
+      POSTGRES_PASSWORD: spiski
+      TZ: UTC
+      PGTZ: UTC
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spiski -d spiski"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+    command: >
+      postgres -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+
+volumes:
+  postgres_data:
+  composer_cache:
+  caddy_data:
+  caddy_config:
