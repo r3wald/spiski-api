@@ -14,6 +14,16 @@ security:
             pattern: ^/(api/doc|_profiler|_wdt)
             security: false
 
+        # Admin-Seite /admin und /v1/admin/*: eigenes Token statt Account-UUID, bei jedem
+        # Request im Authorization-Header (CLAUDE.md 6). Muss vor
+        # der Firewall "api" stehen, sonst wuerde dort das Token als UUID gelesen.
+        admin:
+            pattern: ^/(v1/)?admin(/|$)
+            stateless: true
+            custom_authenticators:
+                - App\Security\AdminTokenAuthenticator
+            entry_point: App\Security\AdminTokenAuthenticator
+
         api:
             pattern: ^/
             stateless: true
@@ -24,4 +34,5 @@ security:
 
     access_control:
         - { path: ^/v1/health$, roles: PUBLIC_ACCESS }
+        - { path: ^/(v1/)?admin(/|$), roles: ROLE_ADMIN }
         - { path: ^/v1/, roles: ROLE_USER }

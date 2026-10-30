@@ -49,6 +49,8 @@ curl -s -X POST localhost:8081/v1/sync \
 | `DELETE` | `/v1/me` | Bearer |
 | `GET` | `/v1/health` | – |
 | `GET` | `/` | – |
+| `GET` | `/admin/` | – (Token wird in der Seite abgefragt) |
+| `GET` | `/v1/admin/lists` | Admin-Token |
 
 `/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). Caddy liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/caddy/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
 
@@ -61,9 +63,27 @@ Die vollständige Beschreibung liegt als [openapi.yaml](openapi.yaml) im Repo un
 | `DATABASE_URL` | PostgreSQL-DSN |
 | `APP_ENV` | `dev`, `test` oder `prod` |
 | `APP_SECRET` | Symfony-Secret |
+| `ADMIN_TOKEN` | Token für die Admin-Seite, mindestens 32 Zeichen. Leer oder kürzer = Admin-Zugang abgeschaltet |
 | `SPISKI_CLOCK_SKEW_TOLERANCE` | Sekunden, die ein `updatedAt` in der Zukunft liegen darf, bevor der Server es kappt (Default 300) |
 
 Achtung: `APP_ENV` und `DATABASE_URL` sind bewusst **nicht** im `php`-Service der `compose.yaml` gesetzt. Echte Umgebungsvariablen haben in Symfony Vorrang vor `.env`-Dateien; gesetzt würden sie `.env.test` aushebeln und den Testlauf auf die Entwicklungsdatenbank lenken, die er zwischen den Tests per `TRUNCATE` leert.
+
+## Admin-Seite
+
+`/admin/` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Artikel (aktiv / gesamt), letzte Änderung und Status. Man kann nach Name oder Kürzel filtern und gelöschte Listen ausblenden. Die Seite ist statisch (`public/admin/`), die Daten kommen von `GET /v1/admin/lists`.
+
+**Anmeldung per Token.** Die Seite fragt das Token ab und schickt es als `Authorization: Bearer <ADMIN_TOKEN>`. Es wird nur im Arbeitsspeicher des Tabs gehalten, nicht in `localStorage`, Cookies oder der URL; ein Neuladen meldet ab. Es gibt keine Sessions.
+
+```bash
+openssl rand -hex 32      # Token erzeugen, in .env.prod (Produktion) bzw. .env.local (lokal) als ADMIN_TOKEN eintragen
+make prod-restart         # danach neu starten
+```
+
+Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt 401 (dieselbe Meldung wie bei einem falschen Token). Das Token wechselt man, indem man es in `.env.prod` ersetzt und neu startet.
+
+**Datenschutz.** Die Seite zeigt keine Artikel, nur Zähler. Die Account-UUID ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
+
+**Missbrauchsschutz.** Höchstens 30 Anfragen pro Minute und IP an `/v1/admin` (auch erfolgreiche); danach 429 mit `Retry-After`. Der Endpunkt steht bewusst nicht in `openapi.yaml`.
 
 ## Produktion
 

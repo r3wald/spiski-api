@@ -204,4 +204,5 @@ nelmio_api_doc:
             - AccountUuid: []
     areas:
         path_patterns:
-            - ^/v1
+            # Die Admin-Endpunkte gehoeren nicht zum Vertrag mit der App.
+            - ^/v1(?!/admin)

@@ -22,6 +22,11 @@ services:
         arguments:
             $toleranceSeconds: '%env(int:SPISKI_CLOCK_SKEW_TOLERANCE)%'
 
+    # Leer oder kuerzer als 32 Zeichen = Admin-Zugang abgeschaltet.
+    App\Security\AdminTokenAuthenticator:
+        arguments:
+            $adminToken: '%env(ADMIN_TOKEN)%'
+
     App\EventListener\ApiExceptionListener:
         arguments:
             $debug: '%kernel.debug%'
