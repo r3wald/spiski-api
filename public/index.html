@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>spiski</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230F766E'/%3E%3Cg fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M13 18.5l3.5 3.5 6-7M13 29.5l3.5 3.5 6-7'/%3E%3Cpath d='M30 18h20M30 29h20' /%3E%3Cg opacity='.7'%3E%3Ccircle cx='17' cy='40' r='3.5'/%3E%3Ccircle cx='17' cy='51' r='3.5'/%3E%3Cpath d='M30 40h14M30 51h18'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #f6f8f7;
+      --surface: #ffffff;
+      --text: #14211f;
+      --muted: #4f625f;
+      --border: #dbe4e1;
+      --accent: #0f766e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e1514;
+        --surface: #151f1d;
+        --text: #e6efed;
+        --muted: #9db0ac;
+        --border: #263634;
+        --accent: #2dd4bf;
+      }
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px 16px;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main {
+      width: 100%;
+      max-width: 30rem;
+      padding: 32px 28px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      text-align: center;
+    }
+    svg { width: 72px; height: 72px; }
+    h1 {
+      margin: 16px 0 4px;
+      font-size: 1.75rem;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+    }
+    .tagline { margin: 0 0 20px; color: var(--accent); font-weight: 600; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <svg viewBox="0 0 64 64" role="img" aria-label="spiski-Logo">
+      <rect width="64" height="64" rx="14" fill="#0F766E"/>
+      <g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 18.5l3.5 3.5 6-7M13 29.5l3.5 3.5 6-7"/>
+        <path d="M30 18h20M30 29h20"/>
+        <g opacity=".7">
+          <circle cx="17" cy="40" r="3.5"/>
+          <circle cx="17" cy="51" r="3.5"/>
+          <path d="M30 40h14M30 51h18"/>
+        </g>
+      </g>
+    </svg>
+    <h1>spiski</h1>
+    <p class="tagline">Einkaufslisten, überall dabei.</p>
+    <p>Das ist die Schnittstelle der spiski-App. Hier gibt es nichts zu sehen:
+      die App synchronisiert ihre Listen im Hintergrund mit dieser Adresse.</p>
+    <p>Wenn du die App nutzt, musst du hier nichts tun.</p>
+  </main>
+</body>
+</html>

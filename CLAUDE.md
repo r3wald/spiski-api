@@ -258,7 +258,7 @@ api/
   config/
   migrations/
   docker/
-    caddy/Caddyfile
+    caddy/Caddyfile, Caddyfile.prod
     php/php.dev.ini, php.prod.ini
   src/
     Controller/
@@ -295,6 +295,7 @@ api/
   .github/workflows/ci.yml
   openapi.yaml                 // generiert, versioniert, in CI gegen Drift geprüft
   compose.yaml               // php-fpm, caddy, postgres, postgres_test
+  compose.prod.yaml          // Produktion: nur 127.0.0.1, TLS beim Nginx davor, Secrets in .env.prod
   Dockerfile                   // Stages: base, dev, prod
   Makefile                     // make check = stan + test + openapi-check
 ```

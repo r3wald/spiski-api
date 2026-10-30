@@ -1,3 +1,4 @@
+.idea/
 
 ###> symfony/framework-bundle ###
 /.env.local
@@ -22,3 +23,8 @@ phpstan.neon
 # Datenbank-Dumps aus bin/backup.sh – enthalten personenbezogene Daten.
 /backups/
 ###< spiski ###
+
+###> spiski prod ###
+# Enthaelt Produktions-Secrets.
+/.env.prod
+###< spiski prod ###

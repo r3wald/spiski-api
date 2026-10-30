@@ -16,11 +16,21 @@
 		-Server
 	}
 
-	php_fastcgi php:9000 {
-		root /app/public
+	# Startseite: statisch, ohne PHP. Sonst reicht php_fastcgi "/" an index.php
+	# weiter, und Besucher sehen die Symfony-404-Seite statt einer Willkommensseite.
+	handle / {
+		rewrite * /index.html
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'"
+		file_server
 	}
 
-	file_server
+	handle {
+		php_fastcgi php:9000 {
+			root /app/public
+		}
+
+		file_server
+	}
 
 	log {
 		output stdout

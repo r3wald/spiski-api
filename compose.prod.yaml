@@ -1,0 +1,84 @@
+# Produktions-Stack: PHP-FPM (Code im Image), Caddy, PostgreSQL.
+#
+# Nur lokal erreichbar: Caddy lauscht ausschliesslich auf 127.0.0.1. TLS und die
+# oeffentliche Erreichbarkeit uebernimmt der Nginx-Reverse-Proxy auf dem Host
+# (Beispiel-Konfiguration in README.md, Abschnitt "Produktion").
+#
+# Immer mit --env-file aufrufen, sonst fehlt POSTGRES_PASSWORD – am einfachsten
+# ueber die Make-Targets (make prod-up, prod-migrate, ...):
+#
+#   docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
+#
+# Secrets stehen ausschliesslich in .env.prod (nicht im Repo, nicht im Image).
+
+name: spiski-prod
+
+x-php: &php
+  build:
+    context: .
+    target: prod
+  image: spiski-api:prod
+  env_file: .env.prod
+
+services:
+  php:
+    <<: *php
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      # Bewusst an Loopback gebunden. Nicht auf 0.0.0.0 aendern: Caddy spricht
+      # hier kein TLS, und der Bearer-Token waere im Klartext lesbar.
+      - "127.0.0.1:${HTTP_PORT:-8081}:80"
+    volumes:
+      - ./docker/caddy/Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      # Caddy braucht public/ nur, um zu entscheiden, was an PHP-FPM geht.
+      # Muss derselbe Stand wie das php-Image sein (gleicher Checkout).
+      - ./public:/app/public:ro
+    depends_on:
+      - php
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spiski}
+      POSTGRES_USER: ${POSTGRES_USER:-spiski}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt - mit --env-file .env.prod aufrufen}
+      # Deterministische Zeitzone: alle TIMESTAMPTZ-Werte werden in UTC gehalten.
+      TZ: UTC
+      PGTZ: UTC
+    # Kein ports:-Mapping – die Datenbank ist nur im Compose-Netz erreichbar.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      # PostgreSQL 18 legt die Daten in ein versionsspezifisches Unterverzeichnis;
+      # der Mount gehoert deshalb auf /var/lib/postgresql, nicht auf .../data.
+      - postgres_data:/var/lib/postgresql
+
+  # Einmalig pro Deployment: make prod-migrate
+  migrate:
+    <<: *php
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["php", "bin/console", "doctrine:migrations:migrate", "--no-interaction", "--all-or-nothing"]
+
+volumes:
+  postgres_data:

@@ -18,3 +18,10 @@ compose.yaml
 
 .env.local
 .env.*.local
+
+# Produktions-Secrets kommen zur Laufzeit per env_file, nie ins Image.
+.env.prod
+
+# Compose-Dateien und Proxy-Konfiguration gehoeren nicht ins Image.
+compose.prod.yaml
+docker/caddy/

@@ -1,8 +1,9 @@
 DC  := docker compose
+PROD := docker compose --env-file .env.prod -f compose.prod.yaml
 PHP := $(DC) run --rm php
 
 .DEFAULT_GOAL := help
-.PHONY: help build up down logs shell install migrate diff test stan openapi openapi-check check backup
+.PHONY: help build up down logs shell install migrate diff test stan openapi openapi-check check backup prod-build prod-up prod-down prod-restart prod-logs prod-migrate prod-backup
 
 help: ## Diese Uebersicht
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -10,7 +11,7 @@ help: ## Diese Uebersicht
 build: ## Images bauen
 	$(DC) build
 
-up: ## Stack starten (API auf http://localhost:8080)
+up: ## Stack starten (API auf http://localhost:8081)
 	$(DC) up -d
 
 down: ## Stack stoppen
@@ -50,3 +51,24 @@ check: stan test openapi-check ## Alles, was auch die CI prueft
 
 backup: ## Dump der Entwicklungsdatenbank nach ./backups
 	BACKUP_MODE=docker COMPOSE_SERVICE=postgres ./bin/backup.sh
+
+prod-build: ## Prod-Image bauen
+	$(PROD) build
+
+prod-up: ## Prod-Stack starten (nur auf 127.0.0.1, Port HTTP_PORT, Default 8081)
+	$(PROD) up -d --build
+
+prod-down: ## Prod-Stack stoppen (Daten bleiben im Volume)
+	$(PROD) down
+
+prod-restart: ## php und caddy neu starten (laedt auch ein geaendertes Caddyfile.prod)
+	$(PROD) restart php caddy
+
+prod-logs: ## Prod-Logs folgen
+	$(PROD) logs -f php caddy
+
+prod-migrate: ## Migrations auf die Produktionsdatenbank anwenden
+	$(PROD) run --rm migrate
+
+prod-backup: ## Dump der Produktionsdatenbank nach ./backups
+	set -a; . ./.env.prod; set +a; COMPOSE_FILE=compose.prod.yaml BACKUP_MODE=docker ./bin/backup.sh
