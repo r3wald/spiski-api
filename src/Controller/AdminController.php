@@ -33,7 +33,6 @@ final class AdminController
     }
 
     #[Route('/admin', name: 'admin_page', methods: ['GET'])]
-    #[Route('/admin/', name: 'admin_page_slash', methods: ['GET'])]
     public function page(Request $request): Response
     {
         $limit = $this->intParameter($request, 'limit', self::PAGE_DEFAULT_LIMIT, 1, AdminPageLimits::MAX_LIMIT);
@@ -85,12 +84,8 @@ final class AdminController
 
     private function queryParameter(Request $request): string
     {
-        $value = $request->query->get('q', '');
-        if (!\is_string($value)) {
-            throw ApiProblemException::unprocessable('"q" muss ein Text sein.');
-        }
-
-        $value = trim($value);
+        // getString() lehnt Arrays (q[]=x) selbst mit 400 ab.
+        $value = trim($request->query->getString('q'));
         if (mb_strlen($value) > AdminPageLimits::MAX_QUERY_LENGTH) {
             throw ApiProblemException::unprocessable(\sprintf('"q" darf hoechstens %d Zeichen lang sein.', AdminPageLimits::MAX_QUERY_LENGTH));
         }

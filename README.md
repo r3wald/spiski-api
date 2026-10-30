@@ -49,7 +49,7 @@ curl -s -X POST localhost:8081/v1/sync \
 | `DELETE` | `/v1/me` | Bearer |
 | `GET` | `/v1/health` | – |
 | `GET` | `/` | – |
-| `GET` | `/admin/` | – (Token wird in der Seite abgefragt) |
+| `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
 | `GET` | `/v1/admin/lists` | Admin-Token |
 
 `/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). Caddy liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/caddy/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
@@ -70,20 +70,42 @@ Achtung: `APP_ENV` und `DATABASE_URL` sind bewusst **nicht** im `php`-Service de
 
 ## Admin-Seite
 
-`/admin/` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Artikel (aktiv / gesamt), letzte Änderung und Status. Man kann nach Name oder Kürzel filtern und gelöschte Listen ausblenden. Die Seite ist statisch (`public/admin/`), die Daten kommen von `GET /v1/admin/lists`.
+`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Artikel (aktiv / gesamt), letzte Änderung (UTC) und Status. Die Seite lässt sich nach Name oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
 
-**Anmeldung per Token.** Die Seite fragt das Token ab und schickt es als `Authorization: Bearer <ADMIN_TOKEN>`. Es wird nur im Arbeitsspeicher des Tabs gehalten, nicht in `localStorage`, Cookies oder der URL; ein Neuladen meldet ab. Es gibt keine Sessions.
+**Das Token wird bei jedem Request mitgeschickt**, im Header:
+
+```
+Authorization: Bearer <ADMIN_TOKEN>
+```
+
+Fehlt der Header oder stimmt das Token nicht, antwortet `/admin` mit `401` (Problem-Details-JSON mit dem Hinweis auf den Header). Ein Token in der URL (`?token=…`) wird **bewusst nicht akzeptiert**: URLs landen in Server-Logs, im Browserverlauf und im Referer.
+
+**Im Browser** braucht es dafür eine Erweiterung, die einen Request-Header setzt, z. B. *ModHeader* (Chrome/Firefox): Header `Authorization` mit dem Wert `Bearer <ADMIN_TOKEN>`. **Unbedingt einen URL-Filter auf `https://spiski.r3wald.net/*` setzen**, sonst schickt die Erweiterung das Token an jede Website, die du besuchst. Ohne Erweiterung zeigt der Browser nur das `401`. Per Kommandozeile:
 
 ```bash
-openssl rand -hex 32      # Token erzeugen, in .env.prod (Produktion) bzw. .env.local (lokal) als ADMIN_TOKEN eintragen
+curl -H "Authorization: Bearer $ADMIN_TOKEN" https://spiski.r3wald.net/admin          # HTML
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin/lists?q=milch"   # JSON
+```
+
+| Parameter | Wirkung | `/admin` | `/v1/admin/lists` |
+|-----------|---------|:--------:|:-----------------:|
+| `q` | Teilstring des Listennamens (ohne Groß-/Kleinschreibung) **oder** Anfang eines Account-Kürzels; `%` und `_` gelten wörtlich | ja | ja |
+| `hideDeleted=1` | gelöschte Listen ausblenden | ja | – |
+| `includeDeleted=0` | gelöschte Listen ausblenden | – | ja |
+| `limit`, `offset` | Seitengröße (Standard 50 bzw. 100, höchstens 500) und Versatz | ja | ja |
+
+Token erzeugen und wechseln:
+
+```bash
+openssl rand -hex 32      # als ADMIN_TOKEN in .env.prod (Produktion) bzw. .env.local (lokal) eintragen
 make prod-restart         # danach neu starten
 ```
 
-Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt 401 (dieselbe Meldung wie bei einem falschen Token). Das Token wechselt man, indem man es in `.env.prod` ersetzt und neu startet.
+Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt `401` (dieselbe Meldung wie bei einem falschen Token).
 
-**Datenschutz.** Die Seite zeigt keine Artikel, nur Zähler. Die Account-UUID ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
+**Datenschutz.** Die Seite zeigt keine Artikel, nur Zähler. Die Account-UUID ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Alle Nutzertexte (Listennamen) werden HTML-escaped. Die Antworten sind `no-store`, tragen `Referrer-Policy: no-referrer` und eine Content-Security-Policy ohne Skripte. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
 
-**Missbrauchsschutz.** Höchstens 30 Anfragen pro Minute und IP an `/v1/admin` (auch erfolgreiche); danach 429 mit `Retry-After`. Der Endpunkt steht bewusst nicht in `openapi.yaml`.
+**Missbrauchsschutz.** Höchstens 30 Anfragen pro Minute und IP an `/admin` und `/v1/admin` (auch erfolgreiche); danach `429` mit `Retry-After`. Die Admin-Endpunkte stehen bewusst nicht in `openapi.yaml`.
 
 ## Produktion
 

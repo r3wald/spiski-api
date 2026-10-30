@@ -190,7 +190,7 @@ Vergleich der eingehenden Zeile mit dem Serverstand derselben `id`:
 
 - Die `accountId` wird als `Authorization: Bearer <uuid>` gesendet. Es gibt kein Passwort, keinen Refresh-Token – die UUID **ist** das Secret. Die `clientId` ist kein Secret und dient ausschließlich als Tiebreaker.
 - Ein Custom Symfony Security-Authenticator liest den Bearer-Token, validiert das UUID-Format und legt bei erstem Kontakt automatisch einen `User`-Datensatz an (kein Registrierungs-Endpoint nötig).
-- Die Admin-Seite (`/admin/`, `GET /v1/admin/lists`) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet), eigene Firewall und ein IP-Limit von 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel, und keine Artikel.
+- Die Admin-Seite (`GET /admin`, serverseitig gerendertes HTML, und `GET /v1/admin/lists`, JSON) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: kein Formular, keine Session, kein Cookie, kein JavaScript, ein Token in der URL wird nicht akzeptiert. Eigene Firewall, IP-Limit 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel, und keine Artikel.
 - Da der Besitz der UUID vollen Zugriff gewährt, ist Transportsicherheit Pflicht: nur HTTPS, HSTS.
 - Kein Logging von UUIDs im Klartext in Applikationslogs (nur gehasht, falls überhaupt), um das Risiko bei Log-Leaks zu minimieren.
 
@@ -226,7 +226,8 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `POST` | `/v1/sync` | ja | Push + Pull, siehe Abschnitt 5 |
 | `DELETE` | `/v1/me` | ja | Alle Daten des Nutzers löschen |
 | `GET` | `/v1/health` | nein | Health-Check (App-Status + DB-Erreichbarkeit) |
-| `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts für die Admin-Seite `/admin/`. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
 
 ### Fehlerformat
 
@@ -265,6 +266,8 @@ api/
   src/
     Admin/
       AdminListReader.php      // Lese-Abfrage für die Admin-Seite (DBAL)
+      AdminPageRenderer.php    // HTML der Admin-Seite, ohne JavaScript
+      AdminPageLimits.php
     Controller/
       AdminController.php
       SyncController.php
@@ -297,7 +300,6 @@ api/
       Dto/
   public/
     index.html, robots.txt     // statische Startseite, von Caddy ohne PHP ausgeliefert
-    admin/                     // statische Admin-Seite (index.html, admin.js, admin.css)
   tests/
     Functional/              // API-Tests gegen echte PostgreSQL-Instanz
     Unit/                      // ConflictResolver, ClockSkewGuard

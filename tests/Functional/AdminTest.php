@@ -217,11 +217,20 @@ final class AdminTest extends ApiTestCase
         self::assertFalse($response->headers->has('Set-Cookie'), 'Die Seite ist zustandslos: keine Session, kein Cookie.');
     }
 
-    public function testPageAlsoWorksWithTrailingSlash(): void
+    public function testTrailingSlashRedirectsToThePage(): void
     {
-        $this->seed();
+        $this->adminRequest('/admin/', 'Bearer '.self::ADMIN_TOKEN);
 
-        self::assertStringContainsString('Drogerie', $this->getPage('/admin/'));
+        $response = $this->client->getResponse();
+        self::assertSame(301, $response->getStatusCode());
+        self::assertStringEndsWith('/admin', (string) $response->headers->get('Location'));
+    }
+
+    public function testArrayQueryParameterIsABadRequest(): void
+    {
+        $this->adminRequest('/admin?q[]=x', 'Bearer '.self::ADMIN_TOKEN);
+
+        self::assertSame(400, $this->client->getResponse()->getStatusCode());
     }
 
     public function testPageEscapesUserControlledListNames(): void
