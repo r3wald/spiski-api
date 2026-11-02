@@ -21,6 +21,8 @@ nelmio_api_doc:
               description: Push und Pull in einem Request.
             - name: Account
               description: Verwaltung der Nutzerdaten.
+            - name: Sharing
+              description: Einzelne Listen mit anderen Konten teilen.
             - name: System
         components:
             securitySchemes:
@@ -93,8 +95,21 @@ nelmio_api_doc:
                         - $ref: '#/components/schemas/ListChange'
                         - type: object
                           properties:
-                              serverVersion: { type: integer, format: int64 }
-                          required: [serverVersion]
+                              serverVersion:
+                                  type: integer
+                                  format: int64
+                                  description: Version aus dem Zaehler des abfragenden Kontos.
+                              role:
+                                  type: string
+                                  enum: [owner, member]
+                                  description: >
+                                      `member` = mit diesem Konto geteilt. Mitglieder duerfen Artikel
+                                      aendern, die Liste selbst nur der Besitzer.
+                              memberCount:
+                                  type: integer
+                                  minimum: 0
+                                  description: Mit wie vielen Konten die Liste geteilt ist (ohne Besitzer).
+                          required: [serverVersion, role, memberCount]
 
                 ItemState:
                     description: Der autoritative Serverstand eines Artikels.
@@ -113,7 +128,7 @@ nelmio_api_doc:
                         accepted: { type: boolean }
                         reason:
                             type: string
-                            enum: [stale, unknown_list, invalid, quota_exceeded]
+                            enum: [stale, unknown_list, invalid, quota_exceeded, forbidden]
                             description: Nur bei `accepted = false` gesetzt.
                     required: [id, accepted]
 
@@ -182,6 +197,13 @@ nelmio_api_doc:
                                     type: array
                                     items: { $ref: '#/components/schemas/ItemState' }
                             required: [lists, items]
+                        revokedLists:
+                            type: array
+                            items: { type: string, format: uuid }
+                            description: >
+                                Listen, auf die das Konto keinen Zugriff mehr hat (Teilen beendet,
+                                verlassen, Besitzer geloescht). Der Client entfernt sie samt
+                                Artikeln, auch wenn dort noch Aenderungen ausstehen.
                         pushResults:
                             type: object
                             properties:
@@ -192,7 +214,26 @@ nelmio_api_doc:
                                     type: array
                                     items: { $ref: '#/components/schemas/PushResult' }
                             required: [lists, items]
-                    required: [serverCursor, hasMore, fullResync, changes, pushResults]
+                    required: [serverCursor, hasMore, fullResync, changes, revokedLists, pushResults]
+
+                ShareCode:
+                    type: object
+                    properties:
+                        code:
+                            type: string
+                            example: 'K3M9QZ7T2B8XWPRC4N6DHJFA'
+                            description: 24 Zeichen Crockford-Base32, 120 Bit.
+                        url:
+                            type: string
+                            format: uri
+                            example: 'https://spiski.r3wald.net/join/K3M9QZ7T2B8XWPRC4N6DHJFA'
+                    required: [code, url]
+
+                JoinResult:
+                    type: object
+                    properties:
+                        listId: { type: string, format: uuid }
+                    required: [listId]
 
                 Health:
                     type: object

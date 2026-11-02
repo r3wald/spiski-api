@@ -67,6 +67,30 @@ final class ApiProblemException extends \RuntimeException
         return new self(413, self::TYPE_BASE.'payload-too-large', 'Payload Too Large', $detail);
     }
 
+    public static function forbidden(string $detail): self
+    {
+        return new self(403, self::TYPE_BASE.'forbidden', 'Forbidden', $detail);
+    }
+
+    public static function notFound(string $detail): self
+    {
+        return new self(404, self::TYPE_BASE.'not-found', 'Not Found', $detail);
+    }
+
+    public static function conflict(string $detail): self
+    {
+        return new self(409, self::TYPE_BASE.'conflict', 'Conflict', $detail);
+    }
+
+    /**
+     * Ein seltenes Rennen mit einer gleichzeitigen Freigabe-Aenderung; derselbe
+     * Request klappt beim naechsten Versuch (CLAUDE.md 12).
+     */
+    public static function retryLater(string $detail): self
+    {
+        return new self(503, self::TYPE_BASE.'retry-later', 'Service Unavailable', $detail, ['Retry-After' => '1']);
+    }
+
     public static function unprocessable(string $detail): self
     {
         return new self(422, self::TYPE_BASE.'out-of-range', 'Unprocessable Content', $detail);

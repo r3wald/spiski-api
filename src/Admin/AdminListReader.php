@@ -5,15 +5,16 @@ declare(strict_types=1);
 namespace App\Admin;
 
 use App\Sync\SyncLimits;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 
 /**
- * Lesende Uebersicht ueber alle Listen aller Accounts fuer die Admin-Seite.
+ * Lesende Uebersicht ueber alle Listen aller Accounts (und auf Wunsch deren
+ * Eintraege) fuer die Admin-Seite.
  *
- * Datensparsam: Es werden Listen mit Artikelzahlen geliefert, keine Artikel. Die
- * Account-UUID ist das Zugangs-Secret des Nutzers (CLAUDE.md 6) und verlaesst
- * die Datenbank deshalb nie – stattdessen gibt es ein gehashtes Kuerzel, das nur
- * zum Gruppieren dient.
+ * Die Account-UUID ist das Zugangs-Secret des Nutzers (CLAUDE.md 6) und verlaesst
+ * die Datenbank nie – stattdessen gibt es ein gehashtes Kuerzel, das nur zum
+ * Gruppieren dient. Listennamen, Eintraege und Notizen sind Nutzerinhalt.
  */
 final class AdminListReader
 {
@@ -25,8 +26,10 @@ final class AdminListReader
     }
 
     /**
-     * @param string $query Teilstring des Listennamens (ohne Beachtung der Gross-/Kleinschreibung)
-     *                      oder Anfang eines Account-Kuerzels; leer = kein Filter
+     * @param string $query                Teilstring des Listennamens (ohne Beachtung der Gross-/Kleinschreibung)
+     *                                     oder Anfang eines Account-Kuerzels; leer = kein Filter
+     * @param bool   $includeItems         die Eintraege jeder Liste unter `items` mitliefern
+     * @param bool   $includeArchivedItems dabei auch archivierte (soft-geloeschte) Eintraege
      *
      * @return array{
      *     total: int,
@@ -36,8 +39,14 @@ final class AdminListReader
      *     lists: list<array<string, mixed>>
      * }
      */
-    public function read(int $limit, int $offset, bool $includeDeleted, string $query = ''): array
-    {
+    public function read(
+        int $limit,
+        int $offset,
+        bool $includeDeleted,
+        string $query = '',
+        bool $includeItems = false,
+        bool $includeArchivedItems = false,
+    ): array {
         $conditions = [];
         $params = [];
 
@@ -101,6 +110,13 @@ final class AdminListReader
             ];
         }
 
+        if ($includeItems && [] !== $lists) {
+            $itemsByList = $this->itemsByList(array_column($lists, 'id'), $includeArchivedItems);
+            foreach ($lists as $index => $list) {
+                $lists[$index]['items'] = $itemsByList[$list['id']] ?? [];
+            }
+        }
+
         return [
             'total' => false === $totals ? 0 : (int) $totals['total'],
             'ownerCount' => false === $totals ? 0 : (int) $totals['owners'],
@@ -110,9 +126,62 @@ final class AdminListReader
         ];
     }
 
+    /**
+     * Eine einzige Abfrage fuer alle Listen der Seite statt einer je Liste.
+     *
+     * @param list<string> $listIds
+     *
+     * @return array<string, list<array<string, mixed>>> Eintraege je Listen-ID, in der Reihenfolge der App
+     */
+    private function itemsByList(array $listIds, bool $includeArchived): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            \sprintf(
+                <<<'SQL'
+                    SELECT id, list_id, name, quantity, unit, is_checked, note, sort_order,
+                           created_at, updated_at, deleted_at, moved_at
+                    FROM shopping_item
+                    WHERE list_id IN (:ids) %s
+                    ORDER BY list_id, sort_order, created_at, id
+                    SQL,
+                $includeArchived ? '' : 'AND deleted_at IS NULL',
+            ),
+            ['ids' => $listIds],
+            ['ids' => ArrayParameterType::STRING],
+        );
+
+        $byList = [];
+        foreach ($rows as $row) {
+            $byList[(string) $row['list_id']][] = [
+                'id' => (string) $row['id'],
+                'name' => (string) $row['name'],
+                'quantity' => null === $row['quantity'] ? null : (float) $row['quantity'],
+                'unit' => null === $row['unit'] ? null : (string) $row['unit'],
+                'isChecked' => $this->toBool($row['is_checked']),
+                'note' => null === $row['note'] ? null : (string) $row['note'],
+                'sortOrder' => (int) $row['sort_order'],
+                'createdAt' => $this->timestamp((string) $row['created_at']),
+                'updatedAt' => $this->timestamp((string) $row['updated_at']),
+                'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
+                'movedAt' => null === $row['moved_at'] ? null : $this->timestamp((string) $row['moved_at']),
+            ];
+        }
+
+        return $byList;
+    }
+
     private function ownerRef(string $accountId): string
     {
         return substr(hash('sha256', $accountId), 0, self::OWNER_REF_LENGTH);
+    }
+
+    /**
+     * PostgreSQL liefert Booleans je nach Treiber als bool oder als 't'/'f'. Ein
+     * schlichter Cast machte aus 'f' ein true.
+     */
+    private function toBool(mixed $value): bool
+    {
+        return \in_array($value, [true, 't', 'true', '1', 1], true);
     }
 
     /**

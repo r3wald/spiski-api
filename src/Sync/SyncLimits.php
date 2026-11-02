@@ -21,6 +21,12 @@ final class SyncLimits
     public const MAX_LISTS_PER_USER = 200;
     public const MAX_ITEMS_PER_USER = 5000;
 
+    /** Mitglieder je geteilter Liste, ohne den Besitzer (CLAUDE.md 12). */
+    public const MAX_MEMBERS_PER_LIST = 20;
+
+    /** Geteilte Listen, denen ein Konto als Mitglied angehoert. */
+    public const MAX_MEMBERSHIPS_PER_USER = 100;
+
     public const MAX_LIST_NAME_LENGTH = 100;
     public const MAX_ITEM_NAME_LENGTH = 200;
     public const MAX_UNIT_LENGTH = 20;

@@ -23,7 +23,7 @@ abstract class ApiTestCase extends WebTestCase
     protected function setUp(): void
     {
         $this->client = static::createClient();
-        $this->connection()->executeStatement('TRUNCATE app_user, shopping_list, shopping_item RESTART IDENTITY CASCADE');
+        $this->connection()->executeStatement('TRUNCATE app_user, shopping_list, shopping_item, list_member, sync_view RESTART IDENTITY CASCADE');
     }
 
     protected function connection(): Connection

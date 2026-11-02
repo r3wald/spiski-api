@@ -6,21 +6,27 @@ namespace App\Sync;
 
 use App\Entity\ShoppingItem;
 use App\Entity\ShoppingList;
+use App\Entity\SyncView;
 use App\Entity\User;
+use App\Exception\ApiProblemException;
 use App\Repository\ShoppingItemRepository;
 use App\Repository\ShoppingListRepository;
+use App\Sharing\ListAccess;
+use App\Sharing\ListAudience;
 use App\Sync\Dto\ItemChange;
 use App\Sync\Dto\ListChange;
 use App\Sync\Dto\PushResult;
 use App\Sync\Dto\RejectReason;
 use App\Sync\Dto\SyncRequest;
 use App\Sync\Dto\SyncResult;
-use Doctrine\DBAL\LockMode;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Uid\Uuid;
 
 /**
- * Push und Pull in einer einzigen Transaktion (CLAUDE.md 5.2).
+ * Push und Pull in einer einzigen Transaktion (CLAUDE.md 5.2), mit geteilten
+ * Listen (CLAUDE.md 12).
  */
 final class SyncService
 {
@@ -29,6 +35,8 @@ final class SyncService
         private readonly ShoppingListRepository $listRepository,
         private readonly ShoppingItemRepository $itemRepository,
         private readonly ConflictResolver $conflictResolver,
+        private readonly ListAccess $access,
+        private readonly SyncLock $lock,
     ) {
     }
 
@@ -43,12 +51,36 @@ final class SyncService
 
     private function run(User $user, SyncRequest $request, \DateTimeImmutable $now): SyncResult
     {
-        // Zeilensperre und frischer Zaehlerstand in einem Zug. em->lock() wuerde
-        // zwar SELECT ... FOR UPDATE absetzen, die bereits geladene Entity aber
-        // nicht neu einlesen – der Zaehler waere dann moeglicherweise veraltet.
-        $this->em->refresh($user, LockMode::PESSIMISTIC_WRITE);
+        $connection = $this->em->getConnection();
+        $userId = $user->getId()->toRfc4122();
 
-        $counter = $user->getVersionCounter();
+        // Welche Listen beruehrt der Push? Gehoert eine davon einem anderen
+        // Konto oder hat sie Mitglieder, braucht es die exklusive Sperre.
+        $itemLists = $this->access->listIdsOfItems(array_map(static fn (ItemChange $c): string => $c->id->toRfc4122(), $request->items));
+        $touched = array_values(array_unique([
+            ...array_map(static fn (ListChange $c): string => $c->id->toRfc4122(), $request->lists),
+            ...array_map(static fn (ItemChange $c): string => $c->listId->toRfc4122(), $request->items),
+            ...array_values($itemLists),
+        ]));
+
+        $exclusive = $this->needsExclusive($userId, $this->access->forLists($touched));
+        $exclusive ? $this->lock->exclusive($connection) : $this->lock->shared($connection);
+
+        // Unter der Sperre neu lesen: erst jetzt sind die Mitgliedschaften stabil.
+        $audiences = $this->access->forLists($touched);
+        if (!$exclusive && $this->needsExclusive($userId, $audiences)) {
+            // Zwischen der ersten Abfrage und der Sperre wurde eine Liste
+            // geteilt. Ein Hochstufen der Sperre koennte verklemmen.
+            throw ApiProblemException::retryLater('Freigabe wurde gerade geaendert, bitte erneut synchronisieren.');
+        }
+
+        $userIds = [$userId];
+        foreach ($audiences as $audience) {
+            array_push($userIds, ...$audience->all());
+        }
+        $publisher = VersionPublisher::lock($connection, $exclusive ? $userIds : [$userId]);
+
+        $counter = $publisher->counter($userId);
 
         // Cursor aus einer geloeschten oder wiederhergestellten Datenbank: der
         // Client kennt eine Version, die es serverseitig nicht (mehr) gibt.
@@ -58,34 +90,55 @@ final class SyncService
         $listResults = $request->invalidLists;
         $itemResults = $request->invalidItems;
 
-        $counter = $this->pushLists($user, $request, $counter, $listResults, $ownedLists);
-        $counter = $this->pushItems($user, $request, $counter, $itemResults, $ownedLists);
+        $pushedLists = $this->pushLists($user, $request, $publisher, $audiences, $listResults);
+        $this->pushItems($user, $request, $publisher, $audiences, $pushedLists, $itemResults);
 
-        $user->setVersionCounter($counter);
+        $publisher->flush($connection);
         $user->setLastSeenAt($now);
 
         // Muss vor dem Pull passieren, sonst sieht die Abfrage die soeben
-        // vergebenen serverVersion-Werte nicht.
+        // vergebenen Versionen nicht.
         $this->em->flush();
 
-        return $this->pull($user, $request, $since, $counter, $fullResync, $listResults, $itemResults);
+        return $this->pull($userId, $request, $since, $publisher->counter($userId), $fullResync, $listResults, $itemResults);
     }
 
     /**
-     * @param list<PushResult>                $listResults
-     * @param array<string, ShoppingList>|null $ownedLists
-     *
-     * @param-out array<string, ShoppingList> $ownedLists
+     * @param array<string, ListAudience> $audiences
      */
-    private function pushLists(User $user, SyncRequest $request, int $counter, array &$listResults, ?array &$ownedLists): int
+    private function needsExclusive(string $userId, array $audiences): bool
     {
-        $ids = array_map(static fn (ListChange $change): Uuid => $change->id, $request->lists);
-        $ownedLists = $this->listRepository->findOwnedByIds($user, $ids);
-        $listCount = $this->listRepository->countForUser($user);
+        foreach ($audiences as $audience) {
+            if ($audience->owner !== $userId || $audience->isShared()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<string, ListAudience> $audiences
+     * @param list<PushResult>            $listResults
+     *
+     * @return array<string, ShoppingList> die gepushten Listen, auch neu angelegte
+     */
+    private function pushLists(User $user, SyncRequest $request, VersionPublisher $publisher, array &$audiences, array &$listResults): array
+    {
+        $userId = $user->getId()->toRfc4122();
+        $existingLists = $this->listRepository->findByIds(array_map(static fn (ListChange $c): Uuid => $c->id, $request->lists));
+        $listCount = null;
 
         foreach ($request->lists as $change) {
             $key = $change->id->toRfc4122();
-            $existing = $ownedLists[$key] ?? null;
+            $existing = $existingLists[$key] ?? null;
+
+            // Die Liste selbst (Name, Farbe, Reihenfolge, Loeschen) aendert
+            // nur der Besitzer; Mitglieder bearbeiten nur die Artikel.
+            if (null !== $existing && $existing->getUser()->getId()->toRfc4122() !== $userId) {
+                $listResults[] = PushResult::rejected($change->id, RejectReason::Forbidden);
+                continue;
+            }
 
             $decision = null === $existing
                 ? MergeDecision::Insert
@@ -107,6 +160,7 @@ final class SyncService
             }
 
             if (MergeDecision::Insert === $decision) {
+                $listCount ??= $this->listRepository->countForUser($user);
                 if ($listCount >= SyncLimits::MAX_LISTS_PER_USER) {
                     $listResults[] = PushResult::rejected($change->id, RejectReason::QuotaExceeded);
                     continue;
@@ -114,53 +168,76 @@ final class SyncService
 
                 $existing = new ShoppingList($change->id, $user);
                 $this->em->persist($existing);
-                $ownedLists[$key] = $existing;
+                $existingLists[$key] = $existing;
+                $audiences[$key] = new ListAudience($userId);
                 ++$listCount;
             }
 
             \assert($existing instanceof ShoppingList);
-            $existing->apply($change, ++$counter, $request->clientId);
+            $versions = $publisher->publish(SyncView::KIND_LIST, $key, $audiences[$key]->all());
+            $existing->apply($change, $versions[$userId], $request->clientId);
             $listResults[] = PushResult::accepted($change->id);
         }
 
-        return $counter;
+        return $existingLists;
     }
 
     /**
+     * @param array<string, ListAudience> $audiences
+     * @param array<string, ShoppingList> $pushedLists
      * @param list<PushResult>            $itemResults
-     * @param array<string, ShoppingList> $ownedLists
      */
-    private function pushItems(User $user, SyncRequest $request, int $counter, array &$itemResults, array $ownedLists): int
+    private function pushItems(User $user, SyncRequest $request, VersionPublisher $publisher, array $audiences, array $pushedLists, array &$itemResults): void
     {
-        $ids = array_map(static fn (ItemChange $change): Uuid => $change->id, $request->items);
-        $ownedItems = $this->itemRepository->findOwnedByIds($user, $ids);
-        $itemCount = $this->itemRepository->countForUser($user);
+        $userId = $user->getId()->toRfc4122();
+        $existingItems = $this->itemRepository->findByIds(array_map(static fn (ItemChange $c): Uuid => $c->id, $request->items));
 
-        // Listen, die noch nicht geladen sind, weil sie in diesem Request nicht
-        // mitgepusht wurden. Ein einziger Nachschlag statt N Einzelabfragen.
-        $missing = [];
-        foreach ($request->items as $change) {
-            $key = $change->listId->toRfc4122();
-            if (!isset($ownedLists[$key])) {
-                $missing[$key] = $change->listId;
-            }
+        // Alle beteiligten Listen in einer Abfrage: Ziel-Listen der Artikel und
+        // die Listen, in denen bestehende Artikel derzeit liegen.
+        $listIds = array_map(static fn (ItemChange $c): string => $c->listId->toRfc4122(), $request->items);
+        foreach ($existingItems as $item) {
+            $listIds[] = $item->getList()->getId()->toRfc4122();
         }
-        foreach ($this->listRepository->findOwnedByIds($user, array_values($missing)) as $key => $list) {
-            $ownedLists[$key] = $list;
-        }
+        // Im selben Request neu angelegte Listen sind noch nicht geschrieben und
+        // wuerden von der Abfrage nicht gefunden.
+        $missing = array_values(array_diff(array_unique($listIds), array_keys($pushedLists)));
+        $lists = $pushedLists + $this->listRepository->findByIds($missing);
+
+        /** @var array<string, int> $itemCounts Besitzer => Artikel */
+        $itemCounts = [];
 
         foreach ($request->items as $change) {
-            // Die Aufloesung ist auf $user eingeschraenkt: eine fremde listId
-            // findet nichts und wird abgelehnt. Damit ist das Schreiben in
-            // fremde Listen strukturell ausgeschlossen (CLAUDE.md 5.2).
-            $list = $ownedLists[$change->listId->toRfc4122()] ?? null;
-            if (null === $list) {
+            $listKey = $change->listId->toRfc4122();
+            $list = $lists[$listKey] ?? null;
+            $audience = $audiences[$listKey] ?? null;
+
+            // Nur Listen, die das Konto besitzt oder in denen es Mitglied ist.
+            // Eine fremde listId findet nichts; das Schreiben in fremde Listen
+            // ist damit strukturell ausgeschlossen (CLAUDE.md 5.2, 12).
+            if (null === $list || null === $audience || !$audience->includes($userId)) {
                 $itemResults[] = PushResult::rejected($change->id, RejectReason::UnknownList);
                 continue;
             }
 
             $key = $change->id->toRfc4122();
-            $existing = $ownedItems[$key] ?? null;
+            $existing = $existingItems[$key] ?? null;
+
+            if (null !== $existing) {
+                $currentKey = $existing->getList()->getId()->toRfc4122();
+                $current = $audiences[$currentKey] ?? null;
+                if (null === $current || !$current->includes($userId)) {
+                    $itemResults[] = PushResult::rejected($change->id, RejectReason::UnknownList);
+                    continue;
+                }
+
+                // Ein Artikel darf nur zwischen Listen mit denselben Teilnehmern
+                // wandern, sonst saehe ihn jemand weiter, der keinen Zugriff
+                // mehr haben soll.
+                if ($currentKey !== $listKey && !$current->sameAs($audience)) {
+                    $itemResults[] = PushResult::rejected($change->id, RejectReason::Invalid);
+                    continue;
+                }
+            }
 
             $decision = null === $existing
                 ? MergeDecision::Insert
@@ -182,23 +259,26 @@ final class SyncService
             }
 
             if (MergeDecision::Insert === $decision) {
-                if ($itemCount >= SyncLimits::MAX_ITEMS_PER_USER) {
+                // Das Kontingent zaehlt beim Besitzer der Liste.
+                $owner = $list->getUser();
+                $ownerKey = $owner->getId()->toRfc4122();
+                $itemCounts[$ownerKey] ??= $this->itemRepository->countForUser($owner);
+                if ($itemCounts[$ownerKey] >= SyncLimits::MAX_ITEMS_PER_USER) {
                     $itemResults[] = PushResult::rejected($change->id, RejectReason::QuotaExceeded);
                     continue;
                 }
 
-                $existing = new ShoppingItem($change->id, $user, $list);
+                $existing = new ShoppingItem($change->id, $owner, $list);
                 $this->em->persist($existing);
-                $ownedItems[$key] = $existing;
-                ++$itemCount;
+                $existingItems[$key] = $existing;
+                ++$itemCounts[$ownerKey];
             }
 
             \assert($existing instanceof ShoppingItem);
-            $existing->apply($change, $list, ++$counter, $request->clientId);
+            $versions = $publisher->publish(SyncView::KIND_ITEM, $key, $audience->all());
+            $existing->apply($change, $list, $versions[$audience->owner], $request->clientId);
             $itemResults[] = PushResult::accepted($change->id);
         }
-
-        return $counter;
     }
 
     /**
@@ -206,7 +286,7 @@ final class SyncService
      * @param list<PushResult> $itemResults
      */
     private function pull(
-        User $user,
+        string $userId,
         SyncRequest $request,
         int $since,
         int $counter,
@@ -214,90 +294,108 @@ final class SyncService
         array $listResults,
         array $itemResults,
     ): SyncResult {
+        $connection = $this->em->getConnection();
         $limit = $request->limit;
 
         // Eine Zeile mehr als noetig, um hasMore ohne zweite Abfrage zu erkennen.
-        $pageLists = $this->listRepository->findChangedSince($user, $since, $limit + 1);
-        $pageItems = $this->itemRepository->findChangedSince($user, $since, $limit + 1);
+        /** @var list<array{kind: string, row_id: string, version: int|string}> $rows */
+        $rows = $connection->fetchAllAssociative(
+            'SELECT kind, row_id, version FROM sync_view WHERE user_id = :user AND version > :since ORDER BY version LIMIT :limit',
+            ['user' => $userId, 'since' => $since, 'limit' => $limit + 1],
+            ['since' => ParameterType::INTEGER, 'limit' => ParameterType::INTEGER],
+        );
 
-        $outLists = [];
-        $outItems = [];
-        $listIndex = 0;
-        $itemIndex = 0;
-        $delivered = 0;
-        $lastVersion = null;
-
-        // Beide Tabellen teilen sich denselben Zaehler, die serverVersion-Werte
-        // sind also ueber beide hinweg eindeutig und total geordnet.
-        while ($delivered < $limit) {
-            $list = $pageLists[$listIndex] ?? null;
-            $item = $pageItems[$itemIndex] ?? null;
-
-            if (null === $list && null === $item) {
-                break;
-            }
-
-            if (null !== $list && (null === $item || $list->getServerVersion() <= $item->getServerVersion())) {
-                $outLists[] = $list;
-                $lastVersion = $list->getServerVersion();
-                ++$listIndex;
-            } else {
-                $outItems[] = $item;
-                $lastVersion = $item->getServerVersion();
-                ++$itemIndex;
-            }
-
-            ++$delivered;
-        }
-
-        $hasMore = isset($pageLists[$listIndex]) || isset($pageItems[$itemIndex]);
+        $hasMore = \count($rows) > $limit;
+        $page = \array_slice($rows, 0, $limit);
 
         // Bei abgeschnittener Seite muss der Cursor exakt auf der letzten
         // ausgelieferten Zeile stehen. Sonst ist der Zaehlerstand richtig: er
         // kann ueber der hoechsten Zeilenversion liegen, wenn Zeilen entfernt
         // wurden, und erspart dem Client eine Leerabfrage.
-        $serverCursor = $hasMore ? ($lastVersion ?? $since) : $counter;
+        $serverCursor = $hasMore && [] !== $page ? (int) $page[\count($page) - 1]['version'] : $counter;
+
+        $versions = [];
+        $listIds = [];
+        $itemIds = [];
+        $revoked = [];
+        foreach ($page as $row) {
+            $versions[$row['kind'].':'.$row['row_id']] = (int) $row['version'];
+            match ($row['kind']) {
+                SyncView::KIND_LIST => $listIds[] = $row['row_id'],
+                SyncView::KIND_ITEM => $itemIds[] = $row['row_id'],
+                default => $revoked[] = $row['row_id'],
+            };
+        }
 
         // Jede gepushte Zeile bekommt ihren autoritativen Serverstand zurueck,
         // auch wenn sie ausserhalb des Pull-Fensters liegt. Ohne das behaelt ein
         // Client eine per LWW abgelehnte Aenderung dauerhaft, weil die Zeile
-        // ihre alte serverVersion <= since behaelt (CLAUDE.md 5.2, Schritt 5).
-        $outLists = $this->mergeEcho(
-            $outLists,
-            $this->listRepository->findOwnedByIds($user, $request->pushedListIds),
-        );
-        $outItems = $this->mergeEcho(
-            $outItems,
-            $this->itemRepository->findOwnedByIds($user, $request->pushedItemIds),
-        );
-
-        usort($outLists, static fn (ShoppingList $a, ShoppingList $b): int => $a->getServerVersion() <=> $b->getServerVersion());
-        usort($outItems, static fn (ShoppingItem $a, ShoppingItem $b): int => $a->getServerVersion() <=> $b->getServerVersion());
-
-        return new SyncResult($serverCursor, $hasMore, $fullResync, $outLists, $outItems, $listResults, $itemResults);
-    }
-
-    /**
-     * @template T of ShoppingList|ShoppingItem
-     *
-     * @param list<T>            $page
-     * @param array<string, T>   $echo
-     *
-     * @return list<T>
-     */
-    private function mergeEcho(array $page, array $echo): array
-    {
-        $seen = [];
-        foreach ($page as $row) {
-            $seen[$row->getId()->toRfc4122()] = true;
-        }
-
-        foreach ($echo as $key => $row) {
-            if (!isset($seen[$key])) {
-                $page[] = $row;
+        // ihre alte Version <= since behaelt (CLAUDE.md 5.2, Schritt 5).
+        // Nur Zeilen, die dieses Konto sehen darf.
+        $echo = $this->visibleVersions($userId, [
+            SyncView::KIND_LIST => array_map(static fn (Uuid $id): string => $id->toRfc4122(), $request->pushedListIds),
+            SyncView::KIND_ITEM => array_map(static fn (Uuid $id): string => $id->toRfc4122(), $request->pushedItemIds),
+        ]);
+        foreach ($echo as $kindAndId => $version) {
+            if (isset($versions[$kindAndId])) {
+                continue;
+            }
+            $versions[$kindAndId] = $version;
+            [$kind, $id] = explode(':', $kindAndId, 2);
+            if (SyncView::KIND_LIST === $kind) {
+                $listIds[] = $id;
+            } else {
+                $itemIds[] = $id;
             }
         }
 
-        return $page;
+        $outLists = array_values($this->listRepository->findByIds($listIds));
+        $outItems = array_values($this->itemRepository->findByIds($itemIds));
+
+        $listVersion = static fn (ShoppingList $l): int => $versions[SyncView::KIND_LIST.':'.$l->getId()->toRfc4122()];
+        $itemVersion = static fn (ShoppingItem $i): int => $versions[SyncView::KIND_ITEM.':'.$i->getId()->toRfc4122()];
+        usort($outLists, static fn (ShoppingList $a, ShoppingList $b): int => $listVersion($a) <=> $listVersion($b));
+        usort($outItems, static fn (ShoppingItem $a, ShoppingItem $b): int => $itemVersion($a) <=> $itemVersion($b));
+
+        return new SyncResult(
+            $serverCursor,
+            $hasMore,
+            $fullResync,
+            $outLists,
+            $outItems,
+            $listResults,
+            $itemResults,
+            $userId,
+            $versions,
+            $revoked,
+            $this->access->memberCounts(array_map(static fn (ShoppingList $l): string => $l->getId()->toRfc4122(), $outLists)),
+        );
+    }
+
+    /**
+     * @param array<string, list<string>> $idsByKind
+     *
+     * @return array<string, int> "kind:id" => Version des Kontos
+     */
+    private function visibleVersions(string $userId, array $idsByKind): array
+    {
+        $versions = [];
+        foreach ($idsByKind as $kind => $ids) {
+            if ([] === $ids) {
+                continue;
+            }
+
+            /** @var array<string, int|string> $rows */
+            $rows = $this->em->getConnection()->fetchAllKeyValue(
+                'SELECT row_id, version FROM sync_view WHERE user_id = :user AND kind = :kind AND row_id IN (:ids)',
+                ['user' => $userId, 'kind' => $kind, 'ids' => $ids],
+                ['ids' => ArrayParameterType::STRING],
+            );
+            foreach ($rows as $id => $version) {
+                $versions[$kind.':'.$id] = (int) $version;
+            }
+        }
+
+        return $versions;
     }
 }

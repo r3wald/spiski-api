@@ -13,7 +13,7 @@ paths:
       tags:
         - Account
       summary: 'Alle Daten des Nutzers loeschen'
-      description: "Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf\nLoeschung). Derselbe Bearer-Token legt beim naechsten Request einen\nleeren Account an; der Client muss seinen `lastSyncCursor`\ngleichzeitig lokal auf 0 zuruecksetzen."
+      description: "Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf\nLoeschung). Mit anderen geteilte Listen verschwinden auch bei deren\nMitgliedern; aus fremden geteilten Listen tritt das Konto aus. Derselbe Bearer-Token legt beim naechsten Request einen\nleeren Account an; der Client muss seinen `lastSyncCursor`\ngleichzeitig lokal auf 0 zuruecksetzen."
       operationId: delete_v1_me_delete
       responses:
         '204':
@@ -44,6 +44,172 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
       security: []
+  '/v1/lists/{id}/share':
+    post:
+      tags:
+        - Sharing
+      summary: 'Teilen-Code einer Liste abrufen'
+      description: 'Liefert den Teilen-Code der Liste und legt ihn beim ersten Aufruf an. Nur der Besitzer. Der Code gilt, bis er erneuert oder das Teilen beendet wird.'
+      operationId: post_v1_list_share
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 'Code und Link'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareCode'
+        '403':
+          description: 'Nur der Besitzer darf teilen'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: 'Liste unbekannt oder nicht sichtbar'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+        - Sharing
+      summary: 'Teilen beenden'
+      description: 'Der Code wird ungueltig, alle Mitglieder verlieren den Zugriff und bekommen die Liste beim naechsten Sync als `revokedLists`. Nur der Besitzer.'
+      operationId: delete_v1_list_share_stop
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: 'Teilen beendet'
+        '403':
+          description: 'Nur der Besitzer darf teilen'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: 'Liste unbekannt oder nicht sichtbar'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  '/v1/lists/{id}/share/renew':
+    post:
+      tags:
+        - Sharing
+      summary: 'Neuen Teilen-Code erzeugen'
+      description: 'Der bisherige Code wird ungueltig. Bestehende Mitglieder behalten ihren Zugriff. Nur der Besitzer.'
+      operationId: post_v1_list_share_renew
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 'Neuer Code und Link'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareCode'
+        '403':
+          description: 'Nur der Besitzer darf teilen'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: 'Liste unbekannt oder nicht sichtbar'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  '/v1/lists/{id}/membership':
+    delete:
+      tags:
+        - Sharing
+      summary: 'Geteilte Liste verlassen'
+      description: 'Das eigene Konto verliert den Zugriff; die Liste kommt beim naechsten Sync als `revokedLists`.'
+      operationId: delete_v1_list_leave
+      parameters:
+        -
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Verlassen
+        '404':
+          description: 'Kein Mitglied dieser Liste'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: 'Der Besitzer kann nicht austreten'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  '/v1/shares/{code}':
+    post:
+      tags:
+        - Sharing
+      summary: 'Einer geteilten Liste beitreten'
+      description: 'Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.'
+      operationId: post_v1_share_join
+      parameters:
+        -
+          name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Beigetreten
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JoinResult'
+        '404':
+          description: 'Code unbekannt oder nicht mehr gueltig'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: 'Zu viele Mitglieder bzw. geteilte Listen'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: 'Zu viele Versuche, siehe Retry-After'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/sync:
     post:
       tags:
@@ -220,10 +386,23 @@ components:
         -
           required:
             - serverVersion
+            - role
+            - memberCount
           properties:
             serverVersion:
+              description: 'Version aus dem Zaehler des abfragenden Kontos.'
               type: integer
               format: int64
+            role:
+              description: "`member` = mit diesem Konto geteilt. Mitglieder duerfen Artikel aendern, die Liste selbst nur der Besitzer.\n"
+              type: string
+              enum:
+                - owner
+                - member
+            memberCount:
+              description: 'Mit wie vielen Konten die Liste geteilt ist (ohne Besitzer).'
+              type: integer
+              minimum: 0
           type: object
     ItemState:
       description: 'Der autoritative Serverstand eines Artikels.'
@@ -257,6 +436,7 @@ components:
             - unknown_list
             - invalid
             - quota_exceeded
+            - forbidden
       type: object
     SyncRequest:
       required:
@@ -297,6 +477,7 @@ components:
         - hasMore
         - fullResync
         - changes
+        - revokedLists
         - pushResults
       properties:
         serverCursor:
@@ -324,6 +505,12 @@ components:
               items:
                 $ref: '#/components/schemas/ItemState'
           type: object
+        revokedLists:
+          description: "Listen, auf die das Konto keinen Zugriff mehr hat (Teilen beendet, verlassen, Besitzer geloescht). Der Client entfernt sie samt Artikeln, auch wenn dort noch Aenderungen ausstehen.\n"
+          type: array
+          items:
+            type: string
+            format: uuid
         pushResults:
           required:
             - lists
@@ -338,6 +525,28 @@ components:
               items:
                 $ref: '#/components/schemas/PushResult'
           type: object
+      type: object
+    ShareCode:
+      required:
+        - code
+        - url
+      properties:
+        code:
+          description: '24 Zeichen Crockford-Base32, 120 Bit.'
+          type: string
+          example: K3M9QZ7T2B8XWPRC4N6DHJFA
+        url:
+          type: string
+          format: uri
+          example: 'https://spiski.r3wald.net/join/K3M9QZ7T2B8XWPRC4N6DHJFA'
+      type: object
+    JoinResult:
+      required:
+        - listId
+      properties:
+        listId:
+          type: string
+          format: uuid
       type: object
     Health:
       required:
@@ -371,6 +580,9 @@ tags:
   -
     name: Account
     description: 'Verwaltung der Nutzerdaten.'
+  -
+    name: Sharing
+    description: 'Einzelne Listen mit anderen Konten teilen.'
   -
     name: System
 

@@ -93,6 +93,9 @@ class ShoppingItem
     public function apply(ItemChange $change, ShoppingList $list, int $serverVersion, Uuid $clientId): void
     {
         $this->list = $list;
+        // Ein Artikel zaehlt immer zum Besitzer seiner Liste – auch wenn ihn ein
+        // Mitglied einer geteilten Liste angelegt hat (Kontingent, CLAUDE.md 12).
+        $this->user = $list->getUser();
         $this->name = $change->name;
         $this->quantity = $change->quantity;
         $this->unit = $change->unit;

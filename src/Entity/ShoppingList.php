@@ -59,6 +59,13 @@ class ShoppingList
     #[ORM\Column(type: UuidType::NAME)]
     private Uuid $lastClientId;
 
+    /**
+     * Teilen-Code (CLAUDE.md 12): zufaellig, unbefristet, bis der Besitzer ihn
+     * erneuert oder das Teilen beendet. `null` = Liste wird nicht geteilt.
+     */
+    #[ORM\Column(length: 32, unique: true, nullable: true)]
+    private ?string $shareCode = null;
+
     public function __construct(Uuid $id, User $user)
     {
         $this->id = $id;
@@ -133,5 +140,15 @@ class ShoppingList
     public function getLastClientId(): Uuid
     {
         return $this->lastClientId;
+    }
+
+    public function getShareCode(): ?string
+    {
+        return $this->shareCode;
+    }
+
+    public function setShareCode(?string $shareCode): void
+    {
+        $this->shareCode = $shareCode;
     }
 }

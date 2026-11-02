@@ -24,9 +24,13 @@ final class SyncResponseSerializer
             'hasMore' => $result->hasMore,
             'fullResync' => $result->fullResync,
             'changes' => [
-                'lists' => array_map($this->serializeList(...), $result->lists),
-                'items' => array_map($this->serializeItem(...), $result->items),
+                'lists' => array_map(fn (ShoppingList $list): array => $this->serializeList($list, $result), $result->lists),
+                'items' => array_map(fn (ShoppingItem $item): array => $this->serializeItem($item, $result), $result->items),
             ],
+            // Listen, auf die das Konto keinen Zugriff mehr hat (Freigabe
+            // beendet, verlassen, Besitzer geloescht). Der Client entfernt sie
+            // samt Artikeln, auch wenn dort noch Aenderungen ausstehen.
+            'revokedLists' => $result->revokedListIds,
             'pushResults' => [
                 'lists' => array_map($this->serializePushResult(...), $result->listResults),
                 'items' => array_map($this->serializePushResult(...), $result->itemResults),
@@ -37,24 +41,30 @@ final class SyncResponseSerializer
     /**
      * @return array<string, mixed>
      */
-    private function serializeList(ShoppingList $list): array
+    private function serializeList(ShoppingList $list, SyncResult $result): array
     {
+        $id = $list->getId()->toRfc4122();
+
         return [
-            'id' => $list->getId()->toRfc4122(),
+            'id' => $id,
             'name' => $list->getName(),
             'color' => $list->getColor(),
             'sortOrder' => $list->getSortOrder(),
             'createdAt' => $this->timestamp($list->getCreatedAt()),
             'updatedAt' => $this->timestamp($list->getUpdatedAt()),
             'deletedAt' => $this->timestamp($list->getDeletedAt()),
-            'serverVersion' => $list->getServerVersion(),
+            'serverVersion' => $result->versions['list:'.$id] ?? $list->getServerVersion(),
+            // Nur in Antworten: wem die Liste gehoert und mit wie vielen
+            // Konten sie geteilt ist (CLAUDE.md 12).
+            'role' => $list->getUser()->getId()->toRfc4122() === $result->viewerId ? 'owner' : 'member',
+            'memberCount' => $result->memberCounts[$id] ?? 0,
         ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function serializeItem(ShoppingItem $item): array
+    private function serializeItem(ShoppingItem $item, SyncResult $result): array
     {
         return [
             'id' => $item->getId()->toRfc4122(),
@@ -69,7 +79,7 @@ final class SyncResponseSerializer
             'updatedAt' => $this->timestamp($item->getUpdatedAt()),
             'deletedAt' => $this->timestamp($item->getDeletedAt()),
             'movedAt' => $this->timestamp($item->getMovedAt()),
-            'serverVersion' => $item->getServerVersion(),
+            'serverVersion' => $result->versions['item:'.$item->getId()->toRfc4122()] ?? $item->getServerVersion(),
         ];
     }
 

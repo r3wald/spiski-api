@@ -190,7 +190,7 @@ Vergleich der eingehenden Zeile mit dem Serverstand derselben `id`:
 
 - Die `accountId` wird als `Authorization: Bearer <uuid>` gesendet. Es gibt kein Passwort, keinen Refresh-Token – die UUID **ist** das Secret. Die `clientId` ist kein Secret und dient ausschließlich als Tiebreaker.
 - Ein Custom Symfony Security-Authenticator liest den Bearer-Token, validiert das UUID-Format und legt bei erstem Kontakt automatisch einen `User`-Datensatz an (kein Registrierungs-Endpoint nötig).
-- Die Admin-Seite (`GET /admin`, serverseitig gerendertes HTML, und `GET /v1/admin/lists`, JSON) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: kein Formular, keine Session, kein Cookie, kein JavaScript, ein Token in der URL wird nicht akzeptiert. Eigene Firewall, IP-Limit 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel, und keine Artikel.
+- Die Admin-Seite (`GET /admin`, serverseitig gerendertes HTML, und `GET /v1/admin/lists`, JSON) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: kein Formular, keine Session, kein Cookie, kein JavaScript, ein Token in der URL wird nicht akzeptiert. Eigene Firewall, IP-Limit 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel. Gezeigt werden Listen und ihre Einträge (archivierte nur auf Wunsch) als Nutzerinhalt.
 - Da der Besitz der UUID vollen Zugriff gewährt, ist Transportsicherheit Pflicht: nur HTTPS, HSTS.
 - Kein Logging von UUIDs im Klartext in Applikationslogs (nur gehasht, falls überhaupt), um das Risiko bei Log-Leaks zu minimieren.
 
@@ -225,6 +225,11 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 |---|---|---|---|
 | `POST` | `/v1/sync` | ja | Push + Pull, siehe Abschnitt 5 |
 | `DELETE` | `/v1/me` | ja | Alle Daten des Nutzers löschen |
+| `POST` | `/v1/lists/{id}/share` | ja | Teilen-Code abrufen/anlegen (nur Besitzer), siehe Abschnitt 12 |
+| `POST` | `/v1/lists/{id}/share/renew` | ja | Neuer Teilen-Code, alter ungültig (nur Besitzer) |
+| `DELETE` | `/v1/lists/{id}/share` | ja | Teilen beenden, alle Mitglieder verlieren den Zugriff |
+| `DELETE` | `/v1/lists/{id}/membership` | ja | Geteilte Liste verlassen |
+| `POST` | `/v1/shares/{code}` | ja | Einer geteilten Liste beitreten |
 | `GET` | `/v1/health` | nein | Health-Check (App-Status + DB-Erreichbarkeit) |
 | `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
@@ -376,3 +381,59 @@ Betrieblich noch zu klären: Cron-Eintrag auf dem Zielsystem, Ablage außerhalb 
 - Der QR-Code enthält das Vollzugriffs-Secret ohne Ablauf und ohne Bestätigungsschritt am Erstgerät. Für v1 vertretbar, weil er nur lokal und kurz angezeigt wird; ein Kopplungscode mit Ablaufzeit wäre die Härtung.
 - Aufräum-Job für alte Tombstones (Zeitpunkt/Kriterium) – kann in v1 zurückgestellt werden.
 - Upgrade-Pfad Symfony 8.1 → 8.2/8.3 vor 01/2027 einplanen (siehe Abschnitt 2).
+
+## 12. Geteilte Listen
+
+Einzelne Listen lassen sich mit anderen Konten teilen. Das ist etwas anderes als das Koppeln eines Zweitgeräts (Abschnitt 6): Dort teilen sich Geräte **ein** Konto und sehen alles; hier sieht ein fremdes Konto **nur diese eine Liste**.
+
+### Entscheidungen
+
+| Thema | Entscheidung |
+|---|---|
+| Rechte | Mitglieder dürfen Artikel anlegen, ändern, abhaken, löschen. Die Liste selbst (Name, Farbe, Reihenfolge, Löschen) ändert nur der Besitzer; ein Listen-Push eines Mitglieds wird mit `reason: "forbidden"` abgelehnt, das Echo liefert den Serverstand |
+| Teilen-Code | 24 Zeichen Crockford-Base32 (120 Bit, `shopping_list.share_code`), **unabhängig von der Account-UUID** – wer eine Liste teilt, gibt nicht den Zugang zu seinen anderen Listen preis. Unbefristet und mehrfach nutzbar, bis der Besitzer ihn erneuert oder das Teilen beendet. Beim Einlösen zählen Groß-/Kleinschreibung, Bindestriche, Leerzeichen und die Verwechslungen O/0, I/L/1 nicht |
+| Link | `https://<host>/join/<code>`. Mit installierter App öffnet Android ihn direkt (App Link, `public/.well-known/assetlinks.json`); sonst liefert Caddy eine statische Anleitung (`public/join.html`) |
+| Kontingent | Zählt beim Besitzer: `shopping_item.user_id` ist immer der Besitzer der Liste, auch wenn ein Mitglied den Artikel angelegt hat |
+| Grenzen | 20 Mitglieder je Liste, 100 Mitgliedschaften je Konto, 30 Beitrittsversuche pro Stunde und Konto |
+| Konto löschen | Besitzer: Die Liste verschwindet auch bei den Mitgliedern. Mitglied: tritt nur aus |
+| Artikel verschieben | Nur zwischen Listen mit denselben Teilnehmern (`invalid` sonst), damit niemand einen Artikel weiter sieht, der ihn nichts mehr angeht |
+
+### Datenmodell
+
+- `list_member (list_id, user_id, joined_at)` – Mitglieder ohne den Besitzer, beide FKs `ON DELETE CASCADE`.
+- `sync_view (user_id, kind, row_id, version)` – **was ein Konto beim Pull sieht**, mit der Version aus *seinem* Zähler. `kind` ist `list`, `item` oder `revoked` (Liste, auf die das Konto keinen Zugriff mehr hat).
+
+Der Pull liest nur noch `sync_view`. `shopping_list.server_version` und `shopping_item.server_version` tragen weiterhin die Version aus dem Zähler des Besitzers, werden aber für den Pull nicht mehr gebraucht.
+
+### Warum eine Sicht je Konto statt eines globalen Zählers
+
+Der Cursor des Clients muss lückenlos und monoton bleiben (Abschnitt 5.2). Ein globaler Zähler (Sequence) würde bei gleichzeitigen Transaktionen außer der Reihe committen: Ein Pull könnte eine kleinere Version überspringen, die erst später sichtbar wird. Deshalb bleibt jedes Konto bei seinem eigenen Zähler, und jede akzeptierte Änderung an einer geteilten Liste bekommt **in jedem betroffenen Konto** eine eigene Version (`App\Sync\VersionPublisher`). Cursor, Last-Write-Wins, Echo-Regel und `fullResync` bleiben dadurch unverändert.
+
+### Sperren
+
+Eine Änderung an einer geteilten Liste sperrt mehrere `app_user`-Zeilen. Damit sich zwei solche Transaktionen nicht verklemmen:
+
+1. **Zuerst** eine transaktionsweite Advisory-Sperre (`App\Sync\SyncLock`): **exklusiv**, wenn der Request eine Liste berührt, die einem anderen Konto gehört oder Mitglieder hat, sowie bei jedem Beitritt, Austritt, Teilen-Beenden und `DELETE /v1/me`; sonst **geteilt**.
+2. Danach die Kontozeilen, sortiert nach ID (`SELECT … FOR UPDATE`). Mit geteilter Sperre nur die eigene.
+
+Mitgliedschaften ändern sich nur unter der exklusiven Sperre und sind für Inhaber der geteilten Sperre deshalb stabil. Der Normalfall – ein Konto synchronisiert eigene, nicht geteilte Listen – läuft weiter parallel. Wird eine Liste genau zwischen der Einordnung und dem Sperren geteilt, antwortet der Sync mit `503` und `Retry-After: 1`; der Client wiederholt ohnehin mit Backoff.
+
+### Protokoll-Erweiterungen (abwärtskompatibel)
+
+- Listen in `changes.lists` tragen zusätzlich `role` (`owner`/`member`) und `memberCount`. Sie werden nie gepusht.
+- `revokedLists`: Listen-IDs, auf die das Konto keinen Zugriff mehr hat. Der Client löscht sie samt Artikeln, auch mit ausstehenden Änderungen.
+- Neuer Ablehnungsgrund `forbidden`.
+
+Ältere Clients ignorieren die neuen Felder. `forbidden` kann nur ein Mitglied einer geteilten Liste erhalten, also nur ein Client, der Teilen kennt.
+
+### Beitritt und Entzug
+
+- **Beitritt:** Mitgliedschaft anlegen, dann die Liste für alle Teilnehmer neu versionieren (Mitgliederzahl) und jeden Artikel für das neue Mitglied – in dieser Reihenfolge, damit kein Artikel vor seiner Liste ankommt.
+- **Entzug** (Austritt, Teilen beenden, Besitzer gelöscht): Die Einträge des Kontos für Liste und Artikel aus `sync_view` entfernen und einen `revoked`-Eintrag mit neuer Version anlegen. Ein erneuter Beitritt entfernt ihn wieder; ein Konto hat für eine Liste also nie gleichzeitig Zeilen und einen `revoked`-Eintrag.
+
+### Offen
+
+- Mitglieder können die Reihenfolge geteilter Listen nur lokal ändern; ändert der Besitzer die Liste, gilt wieder seine Position.
+- Für den App Link muss in `assetlinks.json` zusätzlich der Fingerprint des **Play-App-Signaturschlüssels** stehen, sobald die App in der Play Console liegt. Bisher stehen dort der Upload-Schlüssel und der Debug-Schlüssel.
+- Keine Liste der Mitglieder (wer genau mitliest) – es gibt keine Namen, nur Konten.
+

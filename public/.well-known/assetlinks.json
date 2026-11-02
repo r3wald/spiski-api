@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.r3wald.spiski",
+      "sha256_cert_fingerprints": [
+        "83:8D:76:7C:63:A5:94:9A:AA:77:A1:76:9B:85:9D:22:AE:8E:E5:D4:6F:9D:19:CB:0A:ED:77:E5:BC:A8:E5:37",
+        "60:7B:BA:5C:1A:72:64:66:AD:95:BF:A0:AE:9D:35:D6:06:4F:38:FC:9A:D9:23:53:61:E4:52:4F:57:8A:DD:11"
+      ]
+    }
+  }
+]

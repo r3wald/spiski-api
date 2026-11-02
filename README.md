@@ -47,6 +47,11 @@ curl -s -X POST localhost:8081/v1/sync \
 |---|---|---|
 | `POST` | `/v1/sync` | Bearer |
 | `DELETE` | `/v1/me` | Bearer |
+| `POST` | `/v1/lists/{id}/share`, `/v1/lists/{id}/share/renew` | Bearer |
+| `DELETE` | `/v1/lists/{id}/share`, `/v1/lists/{id}/membership` | Bearer |
+| `POST` | `/v1/shares/{code}` | Bearer |
+| `GET` | `/join/{code}` | – (statische Seite, Teilen-Link) |
+| `GET` | `/.well-known/assetlinks.json` | – (Android App Links) |
 | `GET` | `/v1/health` | – |
 | `GET` | `/` | – |
 | `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
@@ -70,7 +75,7 @@ Achtung: `APP_ENV` und `DATABASE_URL` sind bewusst **nicht** im `php`-Service de
 
 ## Admin-Seite
 
-`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Artikel (aktiv / gesamt), letzte Änderung (UTC) und Status. Die Seite lässt sich nach Name oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
+`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Einträge (aktiv / gesamt), letzte Änderung (UTC) und Status. Unter jeder Liste klappen **ihre Einträge** auf (Menge, Einheit, Name wie in der App; dazu Notiz sowie die Kennzeichen *erledigt*, *verschoben* und *archiviert*). **Archivierte** (gelöschte) Einträge sind standardmäßig ausgeblendet und lassen sich einblenden; die Zusammenfassung nennt ihre Zahl. Die Seite lässt sich nach Listenname oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
 
 **Das Token wird bei jedem Request mitgeschickt**, im Header:
 
@@ -92,6 +97,10 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin
 | `q` | Teilstring des Listennamens (ohne Groß-/Kleinschreibung) **oder** Anfang eines Account-Kürzels; `%` und `_` gelten wörtlich | ja | ja |
 | `hideDeleted=1` | gelöschte Listen ausblenden | ja | – |
 | `includeDeleted=0` | gelöschte Listen ausblenden | – | ja |
+| `archivedItems=1` | archivierte (gelöschte) Einträge mit anzeigen | ja | – |
+| `open=1` | Einträge aufgeklappt darstellen | ja | – |
+| `includeItems=1` | die Einträge jeder Liste unter `items` mitliefern | – | ja |
+| `includeArchivedItems=1` | dabei auch archivierte Einträge (nur zusammen mit `includeItems=1`) | – | ja |
 | `limit`, `offset` | Seitengröße (Standard 50 bzw. 100, höchstens 500) und Versatz | ja | ja |
 
 Token erzeugen und wechseln:
@@ -103,7 +112,7 @@ make prod-restart         # danach neu starten
 
 Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt `401` (dieselbe Meldung wie bei einem falschen Token).
 
-**Datenschutz.** Die Seite zeigt keine Artikel, nur Zähler. Die Account-UUID ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Alle Nutzertexte (Listennamen) werden HTML-escaped. Die Antworten sind `no-store`, tragen `Referrer-Policy: no-referrer` und eine Content-Security-Policy ohne Skripte. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
+**Datenschutz.** Die Seite zeigt Listennamen, Einträge und Notizen und damit Nutzerinhalt, aber keine Account-UUID: Sie ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Alle Nutzertexte (Listennamen) werden HTML-escaped. Die Antworten sind `no-store`, tragen `Referrer-Policy: no-referrer` und eine Content-Security-Policy ohne Skripte. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
 
 **Missbrauchsschutz.** Höchstens 30 Anfragen pro Minute und IP an `/admin` und `/v1/admin` (auch erfolgreiche); danach `429` mit `Retry-After`. Die Admin-Endpunkte stehen bewusst nicht in `openapi.yaml`.
 

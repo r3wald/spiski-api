@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Functional;
 
+use App\Sync\SyncLock;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception as DbalException;
 
@@ -83,5 +84,43 @@ final class ConcurrencyTest extends ApiTestCase
         self::assertCount(21, $versions);
         self::assertSameSize($versions, array_unique($versions), 'Jede Version darf nur einmal vergeben sein.');
         self::assertSame(range(1, 21), $versions, 'Der Zaehler muss luecken- und sprungfrei hochlaufen.');
+    }
+
+    /**
+     * Aenderungen an geteilten Listen sperren mehrere Konten und laufen deshalb
+     * exklusiv; alles andere teilt sich die Sperre (CLAUDE.md 12, SyncLock).
+     */
+    public function testExclusiveSyncLockWaitsForSharedHolders(): void
+    {
+        $params = $this->connection()->getParams();
+        $reader = DriverManager::getConnection($params);
+        $secondReader = DriverManager::getConnection($params);
+        $writer = DriverManager::getConnection($params);
+
+        $lock = new SyncLock();
+        $reader->beginTransaction();
+        $lock->shared($reader);
+
+        // Geteilt neben geteilt: kein Warten.
+        $secondReader->beginTransaction();
+        $secondReader->executeStatement("SET LOCAL lock_timeout = '300ms'");
+        $lock->shared($secondReader);
+
+        $writer->beginTransaction();
+        $writer->executeStatement("SET LOCAL lock_timeout = '300ms'");
+
+        try {
+            $lock->exclusive($writer);
+            self::fail('Die exklusive Sperre haette warten muessen.');
+        } catch (DbalException $e) {
+            self::assertStringContainsStringIgnoringCase('lock timeout', $e->getMessage());
+        } finally {
+            $writer->rollBack();
+            $secondReader->rollBack();
+            $reader->rollBack();
+            $writer->close();
+            $secondReader->close();
+            $reader->close();
+        }
     }
 }

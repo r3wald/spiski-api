@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Admin\AdminListReader;
+use App\Admin\AdminPageFilter;
 use App\Admin\AdminPageLimits;
 use App\Admin\AdminPageRenderer;
 use App\Exception\ApiProblemException;
@@ -37,13 +38,17 @@ final class AdminController
     {
         $limit = $this->intParameter($request, 'limit', self::PAGE_DEFAULT_LIMIT, 1, AdminPageLimits::MAX_LIMIT);
         $offset = $this->intParameter($request, 'offset', 0, 0, AdminPageLimits::MAX_OFFSET);
-        $query = $this->queryParameter($request);
-        $hideDeleted = $request->query->getBoolean('hideDeleted');
+        $filter = new AdminPageFilter(
+            query: $this->queryParameter($request),
+            hideDeletedLists: $request->query->getBoolean('hideDeleted'),
+            showArchivedItems: $request->query->getBoolean('archivedItems'),
+            expandItems: $request->query->getBoolean('open'),
+        );
 
+        // Die Eintraege jeder Liste gehoeren zur Seite (aufklappbar); archivierte nur auf Wunsch.
         $html = $this->renderer->render(
-            $this->reader->read($limit, $offset, !$hideDeleted, $query),
-            $query,
-            $hideDeleted,
+            $this->reader->read($limit, $offset, !$filter->hideDeletedLists, $filter->query, true, $filter->showArchivedItems),
+            $filter,
         );
 
         $response = new Response($html);
@@ -65,7 +70,14 @@ final class AdminController
         $offset = $this->intParameter($request, 'offset', 0, 0, AdminPageLimits::MAX_OFFSET);
         $includeDeleted = $request->query->getBoolean('includeDeleted', true);
 
-        $response = new JsonResponse($this->reader->read($limit, $offset, $includeDeleted, $this->queryParameter($request)));
+        $response = new JsonResponse($this->reader->read(
+            $limit,
+            $offset,
+            $includeDeleted,
+            $this->queryParameter($request),
+            $request->query->getBoolean('includeItems'),
+            $request->query->getBoolean('includeArchivedItems'),
+        ));
         $this->hardenResponse($response);
 
         return $response;

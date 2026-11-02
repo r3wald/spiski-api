@@ -22,4 +22,11 @@ enum RejectReason: string
 
     /** Speichergrenze des Nutzers erreicht. */
     case QuotaExceeded = 'quota_exceeded';
+
+    /**
+     * Die Liste gehoert einem anderen Konto. Mitglieder einer geteilten Liste
+     * duerfen ihre Artikel aendern, die Liste selbst nur der Besitzer
+     * (CLAUDE.md 12).
+     */
+    case Forbidden = 'forbidden';
 }

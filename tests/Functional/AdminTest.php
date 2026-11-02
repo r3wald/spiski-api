@@ -319,6 +319,157 @@ final class AdminTest extends ApiTestCase
         self::assertSame(1, $this->getLists('q=drog')['total']);
     }
 
+    public function testPageShowsActiveItemsAndHidesArchivedOnesByDefault(): void
+    {
+        $this->seed();
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('1 St Milch', $html, 'Menge, Einheit und Name wie in der App');
+        self::assertStringContainsString('<summary>1 Eintrag · 1 archiviert, ausgeblendet</summary>', $html);
+        self::assertStringNotContainsString('Brot', $html, 'Archivierte Eintraege sind standardmaessig ausgeblendet.');
+        self::assertStringContainsString('<details>', $html);
+        self::assertStringNotContainsString('<details open', $html);
+        self::assertStringContainsString('offen: ', $html);
+        self::assertStringNotContainsString('erledigt', $html, 'Ein nicht abgehakter Eintrag ist nicht erledigt.');
+    }
+
+    public function testPageCanShowArchivedItems(): void
+    {
+        $this->seed();
+
+        $html = $this->getPage('/admin?archivedItems=1');
+
+        self::assertStringContainsString('Brot', $html);
+        self::assertStringContainsString('archiviert 2026-02-01 10:00:02', $html);
+        self::assertStringContainsString('class="item archived"', $html);
+        self::assertStringContainsString('<summary>2 Einträge</summary>', $html);
+        self::assertStringNotContainsString('ausgeblendet', $html);
+    }
+
+    public function testItemsCanBeRenderedExpanded(): void
+    {
+        $this->seed();
+
+        self::assertStringContainsString('<details open>', $this->getPage('/admin?open=1'));
+    }
+
+    public function testListWithOnlyArchivedItemsSaysSo(): void
+    {
+        $list = self::uuid();
+        $this->sync(self::uuid(), [
+            'since' => 0,
+            'clientId' => self::uuid(),
+            'changes' => [
+                'lists' => [self::listRow($list, '2026-03-01T10:00:00.000Z', 'Leergut')],
+                'items' => [self::itemRow(self::uuid(), $list, '2026-03-01T10:00:01.000Z', 'Flaschen', '2026-03-01T10:00:01.000Z')],
+            ],
+        ]);
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('Keine aktiven Einträge · 1 archiviert, ausgeblendet', $html);
+        self::assertStringNotContainsString('Flaschen', $html);
+    }
+
+    public function testItemsAreEscapedInThePage(): void
+    {
+        $list = self::uuid();
+        $this->sync(self::uuid(), [
+            'since' => 0,
+            'clientId' => self::uuid(),
+            'changes' => [
+                'lists' => [self::listRow($list, '2026-03-01T10:00:00.000Z', 'Liste')],
+                'items' => [array_merge(
+                    self::itemRow(self::uuid(), $list, '2026-03-01T10:00:01.000Z', '<img src=x onerror=alert(1)>'),
+                    ['note' => '"><script>alert(2)</script>', 'unit' => '<b>'],
+                )],
+            ],
+        ]);
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('&lt;img src=x onerror=alert(1)&gt;', $html);
+        self::assertStringContainsString('&quot;&gt;&lt;script&gt;alert(2)&lt;/script&gt;', $html);
+        self::assertStringContainsString('&lt;b&gt;', $html);
+        self::assertStringNotContainsString('<img src=x', $html);
+        self::assertStringNotContainsString('<script', $html);
+    }
+
+    public function testItemsAreOrderedLikeInTheAppAndFormattedWithGermanDecimals(): void
+    {
+        $list = self::uuid();
+        $this->sync(self::uuid(), [
+            'since' => 0,
+            'clientId' => self::uuid(),
+            'changes' => [
+                'lists' => [self::listRow($list, '2026-03-01T10:00:00.000Z', 'Backen')],
+                'items' => [
+                    array_merge(self::itemRow(self::uuid(), $list, '2026-03-01T10:00:01.000Z', 'Mehl'), [
+                        'sortOrder' => 2, 'quantity' => 0.5, 'unit' => 'kg', 'isChecked' => true, 'note' => 'Typ 405',
+                    ]),
+                    array_merge(self::itemRow(self::uuid(), $list, '2026-03-01T10:00:02.000Z', 'Zucker'), [
+                        'sortOrder' => 1, 'quantity' => 2.0, 'unit' => null,
+                    ]),
+                ],
+            ],
+        ]);
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('0,5 kg Mehl', $html);
+        self::assertStringContainsString('2 Zucker', $html, 'Ganze Mengen ohne Nachkommastellen.');
+        self::assertLessThan(strpos($html, 'Mehl'), strpos($html, 'Zucker'), 'sortOrder 1 vor sortOrder 2');
+        self::assertStringContainsString('<span class="tag">erledigt</span>', $html);
+        self::assertStringContainsString('Notiz: Typ 405', $html);
+    }
+
+    public function testPaginationLinksKeepTheItemOptions(): void
+    {
+        $this->seed();
+
+        $html = $this->getPage('/admin?limit=1&archivedItems=1&open=1');
+
+        self::assertStringContainsString('archivedItems=1', $html);
+        self::assertMatchesRegularExpression('/href="\/admin\?[^"]*open=1/', $html);
+        self::assertStringContainsString('<input type="checkbox" name="archivedItems" value="1" checked>', $html);
+    }
+
+    public function testJsonItemsAreOptIn(): void
+    {
+        $this->seed();
+
+        foreach ($this->getLists()['lists'] as $list) {
+            self::assertArrayNotHasKey('items', $list, 'Ohne includeItems keine Eintraege im JSON.');
+        }
+
+        $byName = $this->listsByName($this->getLists('includeItems=1'));
+        self::assertSame(['Milch'], array_column($byName['Wocheneinkauf']['items'], 'name'), 'Archivierte standardmaessig nicht');
+        self::assertSame([], $byName['Drogerie']['items'], 'Eintraege bleiben bei ihrer Liste.');
+        self::assertSame([], $byName['Altlast']['items']);
+
+        $withArchived = $this->listsByName($this->getLists('includeItems=1&includeArchivedItems=1'));
+        $items = $withArchived['Wocheneinkauf']['items'];
+        self::assertSame(['Milch', 'Brot'], array_column($items, 'name'));
+        self::assertNull($items[0]['deletedAt']);
+        self::assertSame('2026-02-01T10:00:02.000Z', $items[1]['deletedAt']);
+        self::assertEquals(1.0, $items[0]['quantity'], 'JSON kennt nur number: 1.0 kommt als 1 an.');
+        self::assertSame('St', $items[0]['unit']);
+        self::assertFalse($items[0]['isChecked']);
+        self::assertSame(['id', 'name', 'quantity', 'unit', 'isChecked', 'note', 'sortOrder', 'createdAt', 'updatedAt', 'deletedAt', 'movedAt'], array_keys($items[0]));
+    }
+
+    public function testItemsDoNotExposeAccountIdentifiers(): void
+    {
+        [$accountA, $accountB] = $this->seed();
+
+        $this->getLists('includeItems=1&includeArchivedItems=1');
+        $raw = (string) $this->client->getResponse()->getContent();
+
+        self::assertStringNotContainsString($accountA, $raw);
+        self::assertStringNotContainsString($accountB, $raw);
+    }
+
     /**
      * Zwei Accounts, drei Listen, davon eine geloescht. Gibt die Account-UUIDs zurueck.
      *
@@ -341,7 +492,11 @@ final class AdminTest extends ApiTestCase
                 ],
                 'items' => [
                     self::itemRow(self::uuid(), $einkauf, '2026-02-01T10:00:01.000Z', 'Milch'),
-                    self::itemRow(self::uuid(), $einkauf, '2026-02-01T10:00:02.000Z', 'Brot', '2026-02-01T10:00:02.000Z'),
+                    // Spaeteres createdAt: bei gleicher sortOrder entscheidet sonst die zufaellige UUID.
+                    array_merge(
+                        self::itemRow(self::uuid(), $einkauf, '2026-02-01T10:00:02.000Z', 'Brot', '2026-02-01T10:00:02.000Z'),
+                        ['createdAt' => '2026-01-02T00:00:00.000Z'],
+                    ),
                 ],
             ],
         ]);
@@ -369,6 +524,23 @@ final class AdminTest extends ApiTestCase
         $decoded = json_decode((string) $response->getContent(), true, 512, \JSON_THROW_ON_ERROR);
 
         return $decoded;
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function listsByName(array $body): array
+    {
+        $byName = [];
+        /** @var list<array<string, mixed>> $lists */
+        $lists = $body['lists'];
+        foreach ($lists as $list) {
+            $byName[(string) $list['name']] = $list;
+        }
+
+        return $byName;
     }
 
     private function getPage(string $uri): string

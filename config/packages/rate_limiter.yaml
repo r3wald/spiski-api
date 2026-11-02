@@ -15,6 +15,13 @@ framework:
             limit: 20
             interval: '1 hour'
 
+        # Pro Account, fuer das Einloesen von Teilen-Codes. Die Codes haben
+        # 120 Bit und sind nicht zu erraten; das Limit bremst trotzdem Versuche.
+        share_join:
+            policy: sliding_window
+            limit: 30
+            interval: '1 hour'
+
         # Pro IP, fuer jede Anfrage an /v1/admin (auch erfolgreiche). Bremst das
         # Raten des Admin-Tokens; das Token selbst ist ein langes Zufalls-Secret.
         admin:
@@ -39,3 +46,7 @@ when@test:
                 policy: sliding_window
                 limit: 10000
                 interval: '1 minute'
+            share_join:
+                policy: sliding_window
+                limit: 10000
+                interval: '1 hour'

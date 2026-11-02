@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Sharing\ShareService;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use OpenApi\Attributes as OA;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +17,7 @@ final class AccountController
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly ShareService $shares,
     ) {
     }
 
@@ -31,7 +34,8 @@ final class AccountController
         summary: 'Alle Daten des Nutzers loeschen',
         description: <<<'TEXT'
             Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf
-            Loeschung). Derselbe Bearer-Token legt beim naechsten Request einen
+            Loeschung). Mit anderen geteilte Listen verschwinden auch bei deren
+            Mitgliedern; aus fremden geteilten Listen tritt das Konto aus. Derselbe Bearer-Token legt beim naechsten Request einen
             leeren Account an; der Client muss seinen `lastSyncCursor`
             gleichzeitig lokal auf 0 zuruecksetzen.
             TEXT,
@@ -41,10 +45,15 @@ final class AccountController
     #[OA\Response(response: 401, description: 'Bearer-Token fehlt oder ist keine UUID', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     public function delete(#[CurrentUser] User $user): Response
     {
-        $this->em->getConnection()->executeStatement(
-            'DELETE FROM app_user WHERE id = :id',
-            ['id' => $user->getId()->toRfc4122()],
-        );
+        $this->em->getConnection()->transactional(function (Connection $connection) use ($user): void {
+            // Mitglieder seiner geteilten Listen verlieren den Zugriff, aus
+            // fremden Listen tritt das Konto aus (CLAUDE.md 12).
+            $this->shares->detachAccount($connection, $user);
+            $connection->executeStatement(
+                'DELETE FROM app_user WHERE id = :id',
+                ['id' => $user->getId()->toRfc4122()],
+            );
+        });
 
         // Der geloeschte Nutzer haengt noch im Identity Map des EntityManagers.
         $this->em->clear();

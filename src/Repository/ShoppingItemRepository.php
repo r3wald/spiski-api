@@ -21,30 +21,14 @@ class ShoppingItemRepository extends ServiceEntityRepository
     }
 
     /**
-     * Pull-Fenster: alle Artikel mit serverVersion > $since, aufsteigend.
+     * Laedt Zeilen unabhaengig vom Konto. Ob der Aufrufer sie sehen oder
+     * aendern darf, entscheidet App\Sharing\ListAccess (CLAUDE.md 12).
      *
-     * @return list<ShoppingItem>
-     */
-    public function findChangedSince(User $user, int $since, int $limit): array
-    {
-        /** @var list<ShoppingItem> */
-        return $this->createQueryBuilder('i')
-            ->andWhere('i.user = :user')
-            ->andWhere('i.serverVersion > :since')
-            ->setParameter('user', $user)
-            ->setParameter('since', $since)
-            ->orderBy('i.serverVersion', 'ASC')
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
-    }
-
-    /**
-     * @param list<Uuid> $ids
+     * @param list<Uuid|string> $ids
      *
      * @return array<string, ShoppingItem> indiziert nach RFC-4122-Darstellung der ID
      */
-    public function findOwnedByIds(User $user, array $ids): array
+    public function findByIds(array $ids): array
     {
         if ([] === $ids) {
             return [];
@@ -52,10 +36,8 @@ class ShoppingItemRepository extends ServiceEntityRepository
 
         /** @var list<ShoppingItem> $rows */
         $rows = $this->createQueryBuilder('i')
-            ->andWhere('i.user = :user')
             ->andWhere('i.id IN (:ids)')
-            ->setParameter('user', $user)
-            ->setParameter('ids', $ids)
+            ->setParameter('ids', array_map(static fn (Uuid|string $id): string => $id instanceof Uuid ? $id->toRfc4122() : $id, $ids))
             ->getQuery()
             ->getResult();
 
