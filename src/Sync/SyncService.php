@@ -276,7 +276,7 @@ final class SyncService
 
             \assert($existing instanceof ShoppingItem);
             $versions = $publisher->publish(SyncView::KIND_ITEM, $key, $audience->all());
-            $existing->apply($change, $list, $versions[$audience->owner], $request->clientId);
+            $existing->apply($change, $list, $versions[$audience->owner], $request->clientId, $user->getId());
             $itemResults[] = PushResult::accepted($change->id);
         }
     }

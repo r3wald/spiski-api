@@ -75,6 +75,16 @@ class ShoppingItem
     #[ORM\Column(type: UuidType::NAME)]
     private Uuid $lastClientId;
 
+    /**
+     * Konto, dessen Schreibvorgang zuletzt gewonnen hat. Nur serverintern: Der
+     * Pull meldet daraus `changedByOther` (Benachrichtigungen in der App), die
+     * ID selbst verlaesst den Server nie. Ohne Fremdschluessel, damit das
+     * Loeschen eines Kontos die Artikel anderer nicht beruehrt; `null` bei
+     * Artikeln aus der Zeit vor dieser Spalte.
+     */
+    #[ORM\Column(type: UuidType::NAME, nullable: true)]
+    private ?Uuid $lastUserId = null;
+
     public function __construct(Uuid $id, User $user, ShoppingList $list)
     {
         $this->id = $id;
@@ -90,7 +100,7 @@ class ShoppingItem
      * Uebernimmt eine gewonnene Push-Zeile. `$list` wird mitgegeben, weil ein
      * Artikel per LWW auch in eine andere Liste verschoben werden kann.
      */
-    public function apply(ItemChange $change, ShoppingList $list, int $serverVersion, Uuid $clientId): void
+    public function apply(ItemChange $change, ShoppingList $list, int $serverVersion, Uuid $clientId, Uuid $userId): void
     {
         $this->list = $list;
         // Ein Artikel zaehlt immer zum Besitzer seiner Liste – auch wenn ihn ein
@@ -108,6 +118,7 @@ class ShoppingItem
         $this->movedAt = $change->movedAt;
         $this->serverVersion = $serverVersion;
         $this->lastClientId = $clientId;
+        $this->lastUserId = $userId;
     }
 
     public function getId(): Uuid
@@ -183,5 +194,10 @@ class ShoppingItem
     public function getLastClientId(): Uuid
     {
         return $this->lastClientId;
+    }
+
+    public function getLastUserId(): ?Uuid
+    {
+        return $this->lastUserId;
     }
 }

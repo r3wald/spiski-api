@@ -80,6 +80,10 @@ final class SyncResponseSerializer
             'deletedAt' => $this->timestamp($item->getDeletedAt()),
             'movedAt' => $this->timestamp($item->getMovedAt()),
             'serverVersion' => $result->versions['item:'.$item->getId()->toRfc4122()] ?? $item->getServerVersion(),
+            // Nur in Antworten: Hat zuletzt ein anderes Konto den Artikel
+            // geaendert (Mitglied oder Besitzer einer geteilten Liste)? Eigene
+            // Geraete zaehlen nicht. Die App benachrichtigt daraufhin.
+            'changedByOther' => $this->changedByOther($item, $result),
         ];
     }
 
@@ -100,6 +104,13 @@ final class SyncResponseSerializer
         }
 
         return $payload;
+    }
+
+    private function changedByOther(ShoppingItem $item, SyncResult $result): bool
+    {
+        $lastUserId = $item->getLastUserId();
+
+        return null !== $lastUserId && '' !== $result->viewerId && $lastUserId->toRfc4122() !== $result->viewerId;
     }
 
     private function timestamp(?\DateTimeImmutable $value): ?string

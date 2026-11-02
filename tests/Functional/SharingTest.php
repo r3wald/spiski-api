@@ -92,6 +92,30 @@ final class SharingTest extends ApiTestCase
         self::assertSame($this->owner, $this->connection()->fetchOne('SELECT user_id FROM shopping_item WHERE id = ?', [$bread]));
     }
 
+    public function testChangedByOtherMarksChangesOfOtherAccountsOnly(): void
+    {
+        $this->joinWithCode($this->member, $this->share($this->owner, $this->listId)['code']);
+        $ownerCursor = $this->cursor($this->owner);
+        $memberCursor = $this->cursor($this->member);
+
+        // Das Mitglied aendert die Milch: fuer den Besitzer fremd, fuer das
+        // Mitglied selbst nicht – auch nicht auf einem zweiten Geraet.
+        $this->sync($this->member, [
+            'since' => $memberCursor,
+            'clientId' => self::uuid(),
+            'changes' => ['items' => [self::itemRow($this->itemId, $this->listId, '2026-06-02T10:00:00.000Z', 'Milch Ersatz')]],
+        ]);
+
+        $ownerView = $this->sync($this->owner, ['since' => $ownerCursor, 'clientId' => self::uuid()]);
+        self::assertTrue(self::findRow($ownerView, 'items', $this->itemId)['changedByOther'] ?? null);
+
+        $memberView = $this->sync($this->member, ['since' => $memberCursor, 'clientId' => self::uuid()]);
+        self::assertFalse(self::findRow($memberView, 'items', $this->itemId)['changedByOther'] ?? null);
+
+        // Die Konto-ID des Schreibers verlaesst den Server nie.
+        self::assertStringNotContainsString($this->member, json_encode($ownerView, \JSON_THROW_ON_ERROR));
+    }
+
     public function testOnlyOwnerMayChangeTheListItself(): void
     {
         $this->joinWithCode($this->member, $this->share($this->owner, $this->listId)['code']);

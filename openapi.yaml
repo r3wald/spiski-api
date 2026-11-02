@@ -412,10 +412,14 @@ components:
         -
           required:
             - serverVersion
+            - changedByOther
           properties:
             serverVersion:
               type: integer
               format: int64
+            changedByOther:
+              description: "Zuletzt hat ein anderes Konto den Artikel geaendert (Mitglied oder Besitzer einer geteilten Liste); eigene Geraete zaehlen nicht. Wird nie gepusht.\n"
+              type: boolean
           type: object
     PushResult:
       description: 'Rueckmeldung zu genau einer gepushten Zeile.'
