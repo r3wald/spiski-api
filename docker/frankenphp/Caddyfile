@@ -45,6 +45,14 @@
 		file_server
 	}
 
+	# Datenschutzerklaerung: statisch, ohne PHP, wie die Startseite.
+	redir /datenschutz /datenschutz/
+	handle /datenschutz/ {
+		rewrite * /datenschutz/index.html
+		header Content-Security-Policy "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'"
+		file_server
+	}
+
 	# Teilen-Link (CLAUDE.md 12): Mit installierter App oeffnet Android ihn direkt
 	# (App Link, verifiziert ueber assetlinks.json); sonst eine statische Anleitung.
 	# Der Code steht in der URL: kein Referer, kein Cache.

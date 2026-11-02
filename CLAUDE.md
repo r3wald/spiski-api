@@ -209,7 +209,7 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 
 - Endpoint `DELETE /v1/me` zum vollständigen Löschen aller Daten eines Nutzers (Recht auf Löschung), auslösbar über einen „Konto zurücksetzen"-Button in den App-Einstellungen. Löscht die User-Zeile hart, per `ON DELETE CASCADE` samt Listen und Items. Antwort `204`. Der nächste Request derselben UUID legt den Nutzer mit `versionCounter = 0` neu an – **der Client muss `lastSyncCursor` gleichzeitig lokal auf 0 zurücksetzen**, sonst greift beim nächsten Sync der `fullResync`-Pfad aus 5.2.
 - Auftragsverarbeitungsvertrag (AVV) mit dem Hosting-Anbieter, sobald dieser feststeht.
-- Datenschutzerklärung der App um den Hinweis auf die Synchronisierung ergänzen.
+- Datenschutzerklärung unter `/datenschutz/` (`public/datenschutz/index.html`). Bei Änderungen an gespeicherten Feldern, Logs, Cookies, Fristen oder Drittanbietern mitpflegen.
 - Backup-Dumps enthalten personenbezogene Daten: verschlüsselt ablegen, Aufbewahrungsfrist begrenzen (siehe Abschnitt 9).
 
 ## 7. API-Design & OpenAPI
@@ -234,6 +234,7 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `GET` | `/status.json`, `/status.html` | nein | Statusseite: API-Version, Revision, DB, Schema, Summen über alle Konten. IP-Limit 60/Minute. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/datenschutz/` | nein | Datenschutzerklärung, statisch (`public/datenschutz/index.html`), von FrankenPHP ohne PHP ausgeliefert. Nicht in der OpenAPI-Spezifikation |
 
 ### Fehlerformat
 
@@ -311,6 +312,7 @@ api/
       Dto/
   public/
     index.html, robots.txt     // statische Startseite, von FrankenPHP ohne PHP ausgeliefert
+    datenschutz/index.html     // Datenschutzerklärung, ebenfalls statisch
   tests/
     Functional/              // API-Tests gegen echte PostgreSQL-Instanz
     Unit/                      // ConflictResolver, ClockSkewGuard
