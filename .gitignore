@@ -22,6 +22,8 @@ phpstan.neon
 ###> spiski ###
 # Datenbank-Dumps aus bin/backup.sh – enthalten personenbezogene Daten.
 /backups/
+/public/spiski.apk
+/public/spiski.json
 ###< spiski ###
 
 ###> spiski prod ###
