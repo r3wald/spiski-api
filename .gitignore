@@ -24,6 +24,8 @@ phpstan.neon
 /backups/
 /public/spiski.apk
 /public/spiski.json
+# Web-App (`make build-web` im App-Projekt), ebenfalls separat auf den Server.
+/public/app/
 ###< spiski ###
 
 ###> spiski prod ###

@@ -9,6 +9,7 @@ use App\Entity\ShoppingList;
 use App\Entity\SyncView;
 use App\Entity\User;
 use App\Exception\ApiProblemException;
+use App\Live\LiveUpdates;
 use App\Repository\ShoppingItemRepository;
 use App\Repository\ShoppingListRepository;
 use App\Sharing\ListAccess;
@@ -37,13 +38,14 @@ final class SyncService
         private readonly ConflictResolver $conflictResolver,
         private readonly ListAccess $access,
         private readonly SyncLock $lock,
+        private readonly LiveUpdates $live,
     ) {
     }
 
     public function sync(User $user, SyncRequest $request, \DateTimeImmutable $now): SyncResult
     {
         /** @var mixed $result */
-        $result = $this->em->wrapInTransaction(fn (): SyncResult => $this->run($user, $request, $now));
+        $result = $this->live->around(fn (): mixed => $this->em->wrapInTransaction(fn (): SyncResult => $this->run($user, $request, $now)));
         \assert($result instanceof SyncResult);
 
         return $result;
@@ -93,7 +95,7 @@ final class SyncService
         $pushedLists = $this->pushLists($user, $request, $publisher, $audiences, $listResults);
         $this->pushItems($user, $request, $publisher, $audiences, $pushedLists, $itemResults);
 
-        $publisher->flush($connection);
+        $this->live->queue($publisher->flush($connection), $userId, $request->clientId->toRfc4122());
         $user->setLastSeenAt($now);
 
         // Muss vor dem Pull passieren, sonst sieht die Abfrage die soeben

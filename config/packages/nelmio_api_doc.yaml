@@ -23,6 +23,8 @@ nelmio_api_doc:
               description: Verwaltung der Nutzerdaten.
             - name: Sharing
               description: Einzelne Listen mit anderen Konten teilen.
+            - name: Live
+              description: Live-Updates ueber den Mercure-Hub.
             - name: System
         components:
             securitySchemes:
@@ -221,6 +223,25 @@ nelmio_api_doc:
                                     items: { $ref: '#/components/schemas/PushResult' }
                             required: [lists, items]
                     required: [serverCursor, hasMore, fullResync, changes, revokedLists, pushResults]
+
+                LiveSubscription:
+                    type: object
+                    properties:
+                        hub:
+                            type: string
+                            example: '/.well-known/mercure'
+                            description: Mercure-Hub, relativ zur API.
+                        topic:
+                            type: string
+                            example: 'urn:spiski:account:3f2a…'
+                            description: Topic des Kontos (HMAC, enthaelt nie die Konto-ID).
+                        token:
+                            type: string
+                            description: Abo-Token (JWT), darf nur dieses Topic lesen.
+                        expiresAt:
+                            type: string
+                            format: date-time
+                    required: [hub, topic, token, expiresAt]
 
                 ShareCode:
                     type: object

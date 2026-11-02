@@ -1,30 +1,28 @@
 services:
+  # FrankenPHP: API, statische Dateien und Mercure-Hub (CLAUDE.md 13).
   php:
     build:
       context: .
       target: dev
+    ports:
+      - "${HTTP_PORT:-8081}:80"
     volumes:
       - .:/app
+      - ./docker/frankenphp/Caddyfile:/etc/frankenphp/Caddyfile:ro
       - composer_cache:/tmp/composer
+      - caddy_data:/data
+      - caddy_config:/config
     # APP_ENV und DATABASE_URL werden hier bewusst NICHT gesetzt. Echte
     # Umgebungsvariablen haben in Symfony Vorrang vor .env-Dateien; sie wuerden
     # .env.test aushebeln und den Testlauf auf die Entwicklungsdatenbank lenken –
     # die er zwischen den Tests per TRUNCATE leert.
+    environment:
+      # Der Hub liest den Schluessel aus der Umgebung, Symfony aus .env – beide
+      # muessen gleich sein.
+      MERCURE_JWT_SECRET: dev-only-mercure-secret-0123456789abcdef
     depends_on:
       postgres:
         condition: service_healthy
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "${HTTP_PORT:-8081}:80"
-    volumes:
-      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./public:/app/public:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - php
 
   postgres:
     image: postgres:18-alpine

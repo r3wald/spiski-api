@@ -7,6 +7,7 @@ namespace App\Sharing;
 use App\Entity\SyncView;
 use App\Entity\User;
 use App\Exception\ApiProblemException;
+use App\Live\LiveUpdates;
 use App\Sync\SyncLimits;
 use App\Sync\SyncLock;
 use App\Sync\VersionPublisher;
@@ -31,6 +32,7 @@ final class ShareService
         private readonly EntityManagerInterface $em,
         private readonly ListAccess $access,
         private readonly SyncLock $lock,
+        private readonly LiveUpdates $live,
     ) {
     }
 
@@ -72,7 +74,7 @@ final class ShareService
 
             $connection->executeStatement('DELETE FROM list_member WHERE list_id = :id', ['id' => $listId]);
             $connection->executeStatement('UPDATE shopping_list SET share_code = NULL WHERE id = :id', ['id' => $listId]);
-            $publisher->flush($connection);
+            $this->live->queue($publisher->flush($connection));
         });
     }
 
@@ -122,7 +124,7 @@ final class ShareService
                 $publisher->publish(SyncView::KIND_ITEM, $itemId, [$userId]);
             }
 
-            $publisher->flush($connection);
+            $this->live->queue($publisher->flush($connection));
 
             return $listId;
         });
@@ -150,7 +152,8 @@ final class ShareService
     /**
      * Vor `DELETE /v1/me`: Mitglieder geteilter Listen dieses Kontos verlieren
      * den Zugriff, und aus fremden Listen tritt es aus. Muss in derselben
-     * Transaktion laufen wie das Loeschen selbst.
+     * Transaktion laufen wie das Loeschen selbst; die Live-Updates sendet der
+     * Aufrufer nach dem Commit (LiveUpdates::around()).
      */
     public function detachAccount(Connection $connection, User $user): void
     {
@@ -164,7 +167,7 @@ final class ShareService
                 foreach ($audience->members as $member) {
                     $publisher->revoke($member, $listId, $items);
                 }
-                $publisher->flush($connection);
+                $this->live->queue($publisher->flush($connection));
             } else {
                 $this->removeMember($connection, $listId, $audience, $userId);
             }
@@ -190,7 +193,7 @@ final class ShareService
             'DELETE FROM list_member WHERE list_id = :list AND user_id = :user',
             ['list' => $listId, 'user' => $memberId],
         );
-        $publisher->flush($connection);
+        $this->live->queue($publisher->flush($connection));
     }
 
     /**
@@ -246,6 +249,6 @@ final class ShareService
     {
         $connection = $this->em->getConnection();
 
-        return $connection->transactional(static fn (): mixed => $work($connection));
+        return $this->live->around(static fn (): mixed => $connection->transactional(static fn (): mixed => $work($connection)));
     }
 }

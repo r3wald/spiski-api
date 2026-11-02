@@ -18,7 +18,7 @@ down: ## Stack stoppen
 	$(DC) down
 
 logs: ## Logs folgen
-	$(DC) logs -f php caddy
+	$(DC) logs -f php
 
 shell: ## Shell im PHP-Container
 	$(DC) run --rm php bash
@@ -61,11 +61,11 @@ prod-up: ## Prod-Stack starten (nur auf 127.0.0.1, Port HTTP_PORT, Default 8081)
 prod-down: ## Prod-Stack stoppen (Daten bleiben im Volume)
 	$(PROD) down
 
-prod-restart: ## php und caddy neu starten (laedt auch ein geaendertes Caddyfile.prod)
-	$(PROD) restart php caddy
+prod-restart: ## FrankenPHP neu starten (laedt auch ein geaendertes Caddyfile.prod)
+	$(PROD) restart php
 
 prod-logs: ## Prod-Logs folgen
-	$(PROD) logs -f php caddy
+	$(PROD) logs -f php
 
 prod-migrate: ## Migrations auf die Produktionsdatenbank anwenden
 	$(PROD) run --rm migrate

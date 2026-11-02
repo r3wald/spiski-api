@@ -3,9 +3,10 @@
 # ---------------------------------------------------------------------------
 # base – gemeinsame Laufzeit für dev, test und prod
 # ---------------------------------------------------------------------------
-FROM php:8.5-fpm-bookworm AS base
+# FrankenPHP: PHP und Webserver (Caddy) samt Mercure-Hub in einem Prozess.
+# install-php-extensions bringt das Image mit.
+FROM dunglas/frankenphp:1.13-php8.5-bookworm AS base
 
-COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions pdo_pgsql intl opcache zip apcu
 
 # postgresql-client wird von bin/backup.sh und den Test-Fixtures gebraucht.
@@ -49,5 +50,9 @@ RUN composer dump-autoload --classmap-authoritative --no-dev \
  && composer run-script post-install-cmd --no-dev \
  && mkdir -p var/cache var/log \
  && chown -R www-data:www-data var
+
+# Ohne root auf Port 80 lauschen; Caddy braucht seine Daten-Verzeichnisse.
+RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp \
+ && chown -R www-data:www-data /data/caddy /config/caddy
 
 USER www-data

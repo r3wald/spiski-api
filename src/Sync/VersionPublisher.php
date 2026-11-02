@@ -22,6 +22,9 @@ final class VersionPublisher
     /** @var array<string, int> */
     private array $counters;
 
+    /** @var array<string, int> Zaehlerstaende beim Sperren */
+    private readonly array $initial;
+
     /** @var array<string, array{0: string, 1: string, 2: string, 3: int}> */
     private array $upserts = [];
 
@@ -34,6 +37,7 @@ final class VersionPublisher
     private function __construct(array $counters)
     {
         $this->counters = $counters;
+        $this->initial = $counters;
     }
 
     /**
@@ -103,7 +107,11 @@ final class VersionPublisher
         $this->removals[] = [$userId, SyncView::KIND_REVOKED, [$listId]];
     }
 
-    public function flush(Connection $connection): void
+    /**
+     * @return list<string> Konten, deren Zaehler gestiegen ist – sie haben
+     *                      etwas abzuholen (Live-Updates, CLAUDE.md 13)
+     */
+    public function flush(Connection $connection): array
     {
         foreach ($this->removals as [$userId, $kind, $rowIds]) {
             if ([] === $rowIds) {
@@ -136,5 +144,10 @@ final class VersionPublisher
 
         $this->upserts = [];
         $this->removals = [];
+
+        return array_values(array_map(
+            strval(...),
+            array_keys(array_filter($this->counters, fn (int $counter, string $userId): bool => $counter > $this->initial[$userId], \ARRAY_FILTER_USE_BOTH)),
+        ));
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\User;
+use App\Live\LiveUpdates;
 use App\Sharing\ShareService;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -18,6 +19,7 @@ final class AccountController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly ShareService $shares,
+        private readonly LiveUpdates $live,
     ) {
     }
 
@@ -45,7 +47,7 @@ final class AccountController
     #[OA\Response(response: 401, description: 'Bearer-Token fehlt oder ist keine UUID', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     public function delete(#[CurrentUser] User $user): Response
     {
-        $this->em->getConnection()->transactional(function (Connection $connection) use ($user): void {
+        $this->live->around(fn () => $this->em->getConnection()->transactional(function (Connection $connection) use ($user): void {
             // Mitglieder seiner geteilten Listen verlieren den Zugriff, aus
             // fremden Listen tritt das Konto aus (CLAUDE.md 12).
             $this->shares->detachAccount($connection, $user);
@@ -53,7 +55,7 @@ final class AccountController
                 'DELETE FROM app_user WHERE id = :id',
                 ['id' => $user->getId()->toRfc4122()],
             );
-        });
+        }));
 
         // Der geloeschte Nutzer haengt noch im Identity Map des EntityManagers.
         $this->em->clear();

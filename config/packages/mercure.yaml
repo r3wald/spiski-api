@@ -1,0 +1,22 @@
+# Live-Updates ueber den Mercure-Hub in FrankenPHP (CLAUDE.md 13).
+#
+# Aussteller (iss) und Zielgruppe (aud) sind feste Kennungen statt URLs: Der Hub
+# ist intern (http://localhost), lokal (Port 8081) und hinter dem Nginx unter
+# verschiedenen Adressen erreichbar, das Token soll ueberall gelten. Beide
+# Werte stehen identisch im Caddyfile (issuer, resource_identifier).
+parameters:
+    spiski.mercure.issuer: 'urn:spiski:api'
+    spiski.mercure.audience: 'urn:spiski:mercure'
+
+mercure:
+    hubs:
+        default:
+            url: '%env(MERCURE_URL)%'
+            jwt:
+                secret: '%env(MERCURE_JWT_SECRET)%'
+                publish: '*'
+                claims:
+                    iss: '%spiski.mercure.issuer%'
+                    aud: '%spiski.mercure.audience%'
+                    sub: 'spiski-api'
+                    client_id: 'spiski-api'

@@ -34,3 +34,10 @@ services:
     App\EventListener\ApiExceptionListener:
         arguments:
             $debug: '%kernel.debug%'
+
+when@test:
+    services:
+        # Kein HTTP zum Hub in Tests; die Updates landen in RecordingHub::$updates.
+        App\Tests\Support\RecordingHub:
+            decorates: mercure.hub.default
+            arguments: ['@.inner']

@@ -22,6 +22,12 @@ compose.yaml
 # Produktions-Secrets kommen zur Laufzeit per env_file, nie ins Image.
 .env.prod
 
-# Compose-Dateien und Proxy-Konfiguration gehoeren nicht ins Image.
+# Compose-Dateien und Webserver-Konfiguration gehoeren nicht ins Image
+# (das Caddyfile wird eingehaengt).
 compose.prod.yaml
-docker/caddy/
+docker/frankenphp/
+
+# Gross und per Bind-Mount von public/ ohnehin da.
+public/*.apk
+public/spiski.json
+public/app/
