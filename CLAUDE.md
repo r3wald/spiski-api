@@ -231,6 +231,7 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `DELETE` | `/v1/lists/{id}/membership` | ja | Geteilte Liste verlassen |
 | `POST` | `/v1/shares/{code}` | ja | Einer geteilten Liste beitreten |
 | `GET` | `/v1/health` | nein | Health-Check (App-Status + DB-Erreichbarkeit) |
+| `GET` | `/status.json`, `/status.html` | nein | Statusseite: API-Version, Revision, DB, Schema, Summen über alle Konten. IP-Limit 60/Minute. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
 
@@ -278,6 +279,7 @@ api/
       SyncController.php
       AccountController.php
       HealthController.php
+      StatusController.php     // /status.json, /status.html (öffentlich)
     Doctrine/
       DateTimeMsType.php       // TIMESTAMPTZ mit Millisekunden statt TIMESTAMP(0)
     Entity/
@@ -295,6 +297,10 @@ api/
       UuidBearerAuthenticator.php
       AdminTokenAuthenticator.php
       UserProvider.php
+    Status/
+      StatusReader.php         // Zustand: Version, DB, Migrationen, Summen – nie UUIDs oder Nutzerinhalt
+      StatusPageRenderer.php   // HTML der Statusseite, ohne JavaScript
+      BuildInfo.php            // liest build-info.json (Revision, Deployment-Zeit; schreibt update.sh)
     Sync/
       SyncService.php        // Transaktion, Zähler-Vergabe, Push/Pull-Orchestrierung
       ConflictResolver.php     // LWW inkl. clientId-Tiebreaker

@@ -29,6 +29,14 @@ framework:
             limit: 30
             interval: '1 minute'
 
+        # Pro IP, fuer /status.json und /status.html. Die Seiten sind oeffentlich und
+        # fragen bei jedem Aufruf die Datenbank; ein Monitor im Minutentakt plus ein
+        # offener Browser-Tab bleiben weit darunter.
+        status:
+            policy: sliding_window
+            limit: 60
+            interval: '1 minute'
+
 when@test:
     framework:
         rate_limiter:
@@ -50,3 +58,7 @@ when@test:
                 policy: sliding_window
                 limit: 10000
                 interval: '1 hour'
+            status:
+                policy: sliding_window
+                limit: 10000
+                interval: '1 minute'

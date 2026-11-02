@@ -53,6 +53,7 @@ curl -s -X POST localhost:8081/v1/sync \
 | `GET` | `/join/{code}` | – (statische Seite, Teilen-Link) |
 | `GET` | `/.well-known/assetlinks.json` | – (Android App Links) |
 | `GET` | `/v1/health` | – |
+| `GET` | `/status.json`, `/status.html` | – (Statusseite, siehe unten) |
 | `GET` | `/` | – |
 | `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
 | `GET` | `/v1/admin/lists` | Admin-Token |
@@ -72,6 +73,26 @@ Die vollständige Beschreibung liegt als [openapi.yaml](openapi.yaml) im Repo un
 | `SPISKI_CLOCK_SKEW_TOLERANCE` | Sekunden, die ein `updatedAt` in der Zukunft liegen darf, bevor der Server es kappt (Default 300) |
 
 Achtung: `APP_ENV` und `DATABASE_URL` sind bewusst **nicht** im `php`-Service der `compose.yaml` gesetzt. Echte Umgebungsvariablen haben in Symfony Vorrang vor `.env`-Dateien; gesetzt würden sie `.env.test` aushebeln und den Testlauf auf die Entwicklungsdatenbank lenken, die er zwischen den Tests per `TRUNCATE` leert.
+
+## Statusseite
+
+`/status.json` und `/status.html` zeigen den Zustand der Anwendung, **ohne Anmeldung**. Beide liefern dieselben Daten; die HTML-Seite kommt ohne JavaScript aus und lädt sich alle 60 Sekunden neu.
+
+| Bereich | Inhalt |
+|---|---|
+| `status` | `ok`, `degraded` (Migrationen ausstehend) oder `down` (Datenbank nicht erreichbar) |
+| `api` | `version` – Version der API, dieselbe wie `info.version` in `openapi.yaml`; `revision` – Git-Commit, `-dirty` bei uncommitteten Änderungen; `deployedAt` |
+| `database` | erreichbar ja/nein, Antwortzeit in ms |
+| `migrations` | Schema aktuell oder Zahl ausstehender Migrationen, zuletzt angewendete Migration |
+| `statistics` | Summen: Konten (gesamt, aktiv in 24 h / 7 / 30 Tagen), Listen (aktiv, gelöscht, geteilt), Einträge (aktiv, archiviert), Mitgliedschaften |
+
+HTTP-Status ist `503` bei `down`, sonst `200` – ein externer Monitor muss nur den Statuscode prüfen. Antworten sind `no-store`; `/status.json` erlaubt CORS (`*`). Höchstens 60 Anfragen pro Minute und IP, danach `429`.
+
+**Version.** Die API-Version steht an genau einer Stelle, dem Parameter `spiski.api_version` in `config/services.yaml`; `openapi.yaml` übernimmt sie (danach `make openapi`). Revision und Deployment-Zeitpunkt schreibt `update.sh` bei jedem Deployment nach `build-info.json` (nicht im Repo, landet über `COPY . .` im Image). Lokal fehlt die Datei, dann steht dort „unbekannt“.
+
+**Datenschutz.** Die Seite zeigt nur Summen – keine Account-UUIDs, keine Kürzel, keine Listennamen oder Einträge, keine Software-Versionen der Infrastruktur und keine Fehlermeldungen. Die Nutzungszahlen sind damit öffentlich sichtbar.
+
+`/v1/health` bleibt der schlanke Check für den Container-Healthcheck.
 
 ## Admin-Seite
 

@@ -12,7 +12,7 @@ nelmio_api_doc:
                 Alle Zeitstempel sind ISO-8601 in UTC mit Millisekunden
                 (`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins
                 ueber `(updatedAt, clientId)` aufgeloest.
-            version: 1.0.0
+            version: '%spiski.api_version%'
         servers:
             - url: /
               description: Aktuelle Instanz

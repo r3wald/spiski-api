@@ -30,3 +30,8 @@ phpstan.neon
 # Enthaelt Produktions-Secrets.
 /.env.prod
 ###< spiski prod ###
+
+###> spiski build ###
+# Code-Stand fuer die Statusseite, schreibt update.sh beim Deployment auf den Server.
+/build-info.json
+###< spiski build ###

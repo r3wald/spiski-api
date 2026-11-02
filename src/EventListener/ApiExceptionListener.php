@@ -12,7 +12,7 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * Uebersetzt Ausnahmen unterhalb von /v1 und /admin in Problem Details (CLAUDE.md 7).
+ * Uebersetzt Ausnahmen unterhalb von /v1, /admin und /status.* in Problem Details (CLAUDE.md 7).
  *
  * Prioritaet 64 laeuft vor dem ErrorListener des HttpKernel (-64), damit dort
  * gar nicht erst die HTML- bzw. Standard-Fehlerdarstellung greift.
@@ -31,7 +31,7 @@ final class ApiExceptionListener
     public function __invoke(ExceptionEvent $event): void
     {
         $path = $event->getRequest()->getPathInfo();
-        if (!str_starts_with($path, '/v1') && !str_starts_with($path, '/admin')) {
+        if (!str_starts_with($path, '/v1') && !str_starts_with($path, '/admin') && !str_starts_with($path, '/status.')) {
             return;
         }
 

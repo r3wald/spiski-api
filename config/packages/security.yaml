@@ -10,6 +10,11 @@ security:
             pattern: ^/v1/health$
             security: false
 
+        # Oeffentliche Statusseite, ohne Auth.
+        status:
+            pattern: ^/status\.(json|html)$
+            security: false
+
         docs:
             pattern: ^/(api/doc|_profiler|_wdt)
             security: false
@@ -34,5 +39,6 @@ security:
 
     access_control:
         - { path: ^/v1/health$, roles: PUBLIC_ACCESS }
+        - { path: ^/status\.(json|html)$, roles: PUBLIC_ACCESS }
         - { path: ^/(v1/)?admin(/|$), roles: ROLE_ADMIN }
         - { path: ^/v1/, roles: ROLE_USER }

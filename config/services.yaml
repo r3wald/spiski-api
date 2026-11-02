@@ -1,6 +1,10 @@
 # yaml-language-server: $schema=../vendor/symfony/dependency-injection/Loader/schema/services.schema.json
 
 parameters:
+    # Version der API (des Vertrags mit der App). Einzige Quelle: steht in openapi.yaml
+    # (info.version, siehe nelmio_api_doc.yaml) und auf /status.json bzw. /status.html.
+    # Bei Aenderungen am Vertrag anheben, danach `make openapi`.
+    spiski.api_version: '1.0.0'
 
 services:
     _defaults:
