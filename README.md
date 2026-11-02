@@ -58,7 +58,7 @@ curl -s -X POST localhost:8081/v1/sync \
 | `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
 | `GET` | `/v1/admin/lists` | Admin-Token |
 
-`/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). Caddy liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/caddy/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
+`/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). FrankenPHP liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/frankenphp/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
 
 Die vollständige Beschreibung liegt als [openapi.yaml](openapi.yaml) im Repo und wird in der CI gegen den Code geprüft. Im dev-Environment ist sie zusätzlich unter `/api/doc.json` abrufbar.
 
@@ -139,7 +139,7 @@ Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet 
 
 ## Produktion
 
-`compose.prod.yaml` startet PHP-FPM (Code im Image), Caddy und PostgreSQL. Die Anwendung ist **nur lokal erreichbar**: Caddy lauscht auf `127.0.0.1:${HTTP_PORT:-8081}`, PostgreSQL veröffentlicht keinen Port. TLS und die öffentliche Erreichbarkeit übernimmt ein Nginx-Reverse-Proxy auf dem Host.
+`compose.prod.yaml` startet FrankenPHP (PHP und Webserver in einem Container, Code im Image, mit eingebautem Mercure-Hub für Live-Updates) und PostgreSQL. Die Anwendung ist **nur lokal erreichbar**: FrankenPHP lauscht auf `127.0.0.1:${HTTP_PORT:-8081}`, PostgreSQL veröffentlicht keinen Port. TLS und die öffentliche Erreichbarkeit übernimmt ein Nginx-Reverse-Proxy auf dem Host.
 
 Alle Secrets stehen in `.env.prod` (nicht im Repo, nicht im Image, Rechte `600`). Die Make-Targets setzen `--env-file .env.prod` automatisch:
 
@@ -147,17 +147,18 @@ Alle Secrets stehen in `.env.prod` (nicht im Repo, nicht im Image, Rechte `600`)
 |---|---|
 | `make prod-up` | Image bauen und Stack starten |
 | `make prod-migrate` | Migrations auf die Produktionsdatenbank anwenden |
-| `make prod-logs` | Logs von php und caddy folgen |
+| `make prod-logs` | Logs von FrankenPHP folgen |
+| `make prod-restart` | FrankenPHP neu starten (lädt auch ein geändertes `Caddyfile.prod`) |
 | `make prod-backup` | `pg_dump` der Produktionsdatenbank nach `./backups` |
 | `make prod-down` | Stack stoppen (Daten bleiben im Volume `postgres_data`) |
 
-Ersteinrichtung: `.env.prod` prüfen (`DEFAULT_URI`), dann `make prod-up && make prod-migrate`. Bei jedem Update dasselbe: Das Image enthält Code und `vendor/`, `composer install` und `cache:warmup` laufen beim Bauen.
+Ersteinrichtung: `.env.prod` prüfen (`DEFAULT_URI`, `MERCURE_JWT_SECRET` mit mindestens 32 zufälligen Zeichen, z. B. `openssl rand -hex 32`), dann `make prod-up && make prod-migrate`. Bei jedem Update dasselbe: Das Image enthält Code und `vendor/`, `composer install` und `cache:warmup` laufen beim Bauen.
 
-`public/` wird als Bind-Mount in den Caddy-Container gelegt und muss deshalb zum selben Stand wie das Image gehören (gleicher Checkout bzw. gleicher rsync).
+`public/` wird als Bind-Mount in den Container gelegt und muss deshalb zum selben Stand wie das Image gehören (gleicher Checkout bzw. gleicher rsync). So kommen auch die App-Downloads (`spiski.apk`, `spiski.json`) und die Web-App (`public/app/`) ohne Neubau dazu.
 
 ### Nginx
 
-Caddy spricht kein TLS. Der Nginx terminiert es und muss die Client-IP weiterreichen, sonst sieht das IP-Limit für neue Accounts nur die Proxy-Adresse:
+FrankenPHP spricht hier kein TLS. Der Nginx terminiert es und muss die Client-IP weiterreichen, sonst sieht das IP-Limit für neue Accounts nur die Proxy-Adresse. Für den Mercure-Hub braucht er einen eigenen `location`-Block: Die Abos sind dauerhafte Server-Sent-Events-Verbindungen, die Nginx weder puffern noch nach 60 Sekunden schließen darf.
 
 ```nginx
 server {
@@ -174,10 +175,23 @@ server {
         proxy_set_header X-Forwarded-For   $remote_addr;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    # Live-Updates (CLAUDE.md 13): dauerhafte SSE-Verbindungen.
+    location /.well-known/mercure {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-For   $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 24h;
+    }
 }
 ```
 
-Steht vor dem Nginx noch ein weiterer Proxy oder CDN, statt `$remote_addr` `$proxy_add_x_forwarded_for` verwenden. `SYMFONY_TRUSTED_PROXIES=PRIVATE_SUBNETS` (in `.env.prod`) und `trusted_proxies` in `docker/caddy/Caddyfile.prod` vertrauen nur privaten Adressbereichen; das ist unbedenklich, solange der Port ausschließlich an `127.0.0.1` gebunden bleibt.
+Steht vor dem Nginx noch ein weiterer Proxy oder CDN, statt `$remote_addr` `$proxy_add_x_forwarded_for` verwenden. `SYMFONY_TRUSTED_PROXIES=PRIVATE_SUBNETS` (in `.env.prod`) und `trusted_proxies` in `docker/frankenphp/Caddyfile.prod` vertrauen nur privaten Adressbereichen; das ist unbedenklich, solange der Port ausschließlich an `127.0.0.1` gebunden bleibt.
 
 ### Backups
 

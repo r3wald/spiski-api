@@ -22,11 +22,6 @@ final class RecordingHub implements HubInterface
     {
     }
 
-    public function getUrl(): string
-    {
-        return $this->inner->getUrl();
-    }
-
     public function getPublicUrl(): string
     {
         return $this->inner->getPublicUrl();

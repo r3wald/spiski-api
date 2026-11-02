@@ -145,9 +145,9 @@ final class VersionPublisher
         $this->upserts = [];
         $this->removals = [];
 
-        return array_values(array_map(
+        return array_map(
             strval(...),
             array_keys(array_filter($this->counters, fn (int $counter, string $userId): bool => $counter > $this->initial[$userId], \ARRAY_FILTER_USE_BOTH)),
-        ));
+        );
     }
 }

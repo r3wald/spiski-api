@@ -44,14 +44,23 @@ final class LiveTest extends ApiTestCase
 
         // Das Token darf genau dieses Topic abonnieren, sonst nichts.
         $claims = self::claims($live['token']);
-        self::assertSame('urn:spiski:api', $claims['iss']);
-        self::assertSame('urn:spiski:mercure', $claims['aud']);
+        self::assertSame('https://spiski.r3wald.net', $claims['iss']);
+        self::assertSame('https://spiski.r3wald.net/.well-known/mercure', $claims['aud']);
         self::assertSame([[
             'type' => 'https://mercure.rocks/authorization-detail',
             'actions' => ['subscribe'],
             'topics' => [['match' => $live['topic']]],
         ]], $claims['authorization_details']);
         self::assertGreaterThan(time(), $claims['exp']);
+
+        // Browser: dasselbe Token als Cookie, nur fuer den Hub.
+        $cookie = $this->client->getResponse()->headers->getCookies()[0] ?? null;
+        self::assertNotNull($cookie);
+        self::assertSame('__Secure-mercure_access_token', $cookie->getName());
+        self::assertSame($live['token'], $cookie->getValue());
+        self::assertSame('/.well-known/mercure', $cookie->getPath());
+        self::assertTrue($cookie->isHttpOnly());
+        self::assertTrue($cookie->isSecure());
     }
 
     public function testLiveRequiresAuthentication(): void
@@ -87,12 +96,13 @@ final class LiveTest extends ApiTestCase
             'clientId' => $memberDevice,
             'changes' => ['items' => [self::itemRow(self::uuid(), $this->listId, '2026-06-02T10:00:00.000Z', 'Brot')]],
         ]);
-        self::assertSame(
+        // Reihenfolge egal: Die Konten werden nach ID gesperrt.
+        self::assertEquals(
             [$this->topic($this->member) => $memberDevice, $this->topic($this->owner) => null],
             $this->recorded(),
         );
 
-        foreach (RecordingHub::$updates as $update) {
+        foreach (self::updates() as $update) {
             self::assertTrue($update->isPrivate());
             self::assertStringNotContainsString($this->owner, $update->getData());
             self::assertStringNotContainsString($this->member, $update->getData());
@@ -121,13 +131,24 @@ final class LiveTest extends ApiTestCase
     private function recorded(): array
     {
         $recorded = [];
-        foreach (RecordingHub::$updates as $update) {
+        foreach (self::updates() as $update) {
             /** @var array{origin: ?string} $data */
             $data = json_decode($update->getData(), true, 512, \JSON_THROW_ON_ERROR);
             $recorded[$update->getTopics()[0]] = $data['origin'];
         }
 
         return $recorded;
+    }
+
+    /**
+     * Ueber eine Methode gelesen, damit PHPStan das Array nach dem Leeren nicht
+     * fuer immer leer haelt.
+     *
+     * @return list<Update>
+     */
+    private static function updates(): array
+    {
+        return RecordingHub::$updates;
     }
 
     private function topic(string $account): string

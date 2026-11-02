@@ -44,6 +44,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
       security: []
+  /v1/live:
+    get:
+      tags:
+        - Live
+      summary: 'Live-Updates abonnieren'
+      description: "Liefert Hub, Topic und ein Abo-Token fuer den Mercure-Hub. Der Client\nabonniert damit `GET {hub}?match={topic}` (Server-Sent Events,\nMercure-Protokoll 1.0) und schickt das Token als\n`Authorization: Bearer`. Browser koennen bei EventSource keine Header\nsetzen: Fuer sie steht das Token zusaetzlich im HttpOnly-Cookie\n`__Secure-mercure_access_token`, das nur an den Hub geht.\n\nJede Nachricht bedeutet nur \"es gibt Neues\": Der Client synchronisiert\ndaraufhin wie gewohnt. `origin` ist die clientId des Geraets, das die\nAenderung ausgeloest hat (nur auf dem eigenen Konto, sonst `null`);\ndieses Geraet kann die Nachricht ignorieren."
+      operationId: get_v1_live
+      responses:
+        '200':
+          description: Abo-Daten
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveSubscription'
+        '401':
+          description: 'Bearer-Token fehlt oder ist keine UUID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   '/v1/lists/{id}/share':
     post:
       tags:
@@ -530,6 +550,28 @@ components:
                 $ref: '#/components/schemas/PushResult'
           type: object
       type: object
+    LiveSubscription:
+      required:
+        - hub
+        - topic
+        - token
+        - expiresAt
+      properties:
+        hub:
+          description: 'Mercure-Hub, relativ zur API.'
+          type: string
+          example: /.well-known/mercure
+        topic:
+          description: 'Topic des Kontos (HMAC, enthaelt nie die Konto-ID).'
+          type: string
+          example: 'urn:spiski:account:3f2a…'
+        token:
+          description: 'Abo-Token (JWT), darf nur dieses Topic lesen.'
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+      type: object
     ShareCode:
       required:
         - code
@@ -587,6 +629,9 @@ tags:
   -
     name: Sharing
     description: 'Einzelne Listen mit anderen Konten teilen.'
+  -
+    name: Live
+    description: 'Live-Updates ueber den Mercure-Hub.'
   -
     name: System
 

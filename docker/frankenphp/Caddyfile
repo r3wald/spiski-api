@@ -26,7 +26,7 @@
 	# config/packages/mercure.yaml passen. Ohne Persistenz: Wer etwas verpasst,
 	# synchronisiert beim Verbinden ohnehin.
 	mercure {
-		issuer urn:spiski:api {
+		issuer https://spiski.r3wald.net {
 			publisher {
 				jwt {env.MERCURE_JWT_SECRET} HS256
 			}
@@ -34,7 +34,7 @@
 				jwt {env.MERCURE_JWT_SECRET} HS256
 			}
 		}
-		resource_identifier urn:spiski:mercure
+		resource_identifier https://spiski.r3wald.net/.well-known/mercure
 	}
 
 	# Startseite: statisch, ohne PHP. Sonst reicht php_server "/" an index.php

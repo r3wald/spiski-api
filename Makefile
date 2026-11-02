@@ -56,7 +56,7 @@ prod-build: ## Prod-Image bauen
 	$(PROD) build
 
 prod-up: ## Prod-Stack starten (nur auf 127.0.0.1, Port HTTP_PORT, Default 8081)
-	$(PROD) up -d --build
+	$(PROD) up -d --build --remove-orphans
 
 prod-down: ## Prod-Stack stoppen (Daten bleiben im Volume)
 	$(PROD) down

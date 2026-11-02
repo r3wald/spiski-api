@@ -267,7 +267,7 @@ api/
   config/
   migrations/
   docker/
-    caddy/Caddyfile, Caddyfile.prod
+    frankenphp/Caddyfile, Caddyfile.prod   // Webserver + Mercure-Hub
     php/php.dev.ini, php.prod.ini
   src/
     Admin/
@@ -310,13 +310,13 @@ api/
       SyncLimits.php           // alle harten Grenzen an einer Stelle
       Dto/
   public/
-    index.html, robots.txt     // statische Startseite, von Caddy ohne PHP ausgeliefert
+    index.html, robots.txt     // statische Startseite, von FrankenPHP ohne PHP ausgeliefert
   tests/
     Functional/              // API-Tests gegen echte PostgreSQL-Instanz
     Unit/                      // ConflictResolver, ClockSkewGuard
   .github/workflows/ci.yml
   openapi.yaml                 // generiert, versioniert, in CI gegen Drift geprüft
-  compose.yaml               // php-fpm, caddy, postgres, postgres_test
+  compose.yaml               // php (FrankenPHP), postgres, postgres_test
   compose.prod.yaml          // Produktion: nur 127.0.0.1, TLS beim Nginx davor, Secrets in .env.prod
   Dockerfile                   // Stages: base, dev, prod
   Makefile                     // make check = stan + test + openapi-check
@@ -330,7 +330,7 @@ Betriebshinweise stehen in `README.md`.
 
 ### Lokale Entwicklung
 
-Docker Compose: PHP-FPM 8.5, Caddy, PostgreSQL 18. Zweiter Postgres-Service (bzw. separate Datenbank) für Tests.
+Docker Compose: FrankenPHP (PHP 8.5, Caddy und Mercure-Hub in einem Container), PostgreSQL 18. Zweiter Postgres-Service (bzw. separate Datenbank) für Tests.
 
 ### Tests
 
@@ -398,7 +398,7 @@ Einzelne Listen lassen sich mit anderen Konten teilen. Das ist etwas anderes als
 |---|---|
 | Rechte | Mitglieder dürfen Artikel anlegen, ändern, abhaken, löschen. Die Liste selbst (Name, Farbe, Reihenfolge, Löschen) ändert nur der Besitzer; ein Listen-Push eines Mitglieds wird mit `reason: "forbidden"` abgelehnt, das Echo liefert den Serverstand |
 | Teilen-Code | 24 Zeichen Crockford-Base32 (120 Bit, `shopping_list.share_code`), **unabhängig von der Account-UUID** – wer eine Liste teilt, gibt nicht den Zugang zu seinen anderen Listen preis. Unbefristet und mehrfach nutzbar, bis der Besitzer ihn erneuert oder das Teilen beendet. Beim Einlösen zählen Groß-/Kleinschreibung, Bindestriche, Leerzeichen und die Verwechslungen O/0, I/L/1 nicht |
-| Link | `https://<host>/join/<code>`. Mit installierter App öffnet Android ihn direkt (App Link, `public/.well-known/assetlinks.json`); sonst liefert Caddy eine statische Anleitung (`public/join.html`) |
+| Link | `https://<host>/join/<code>`. Mit installierter App öffnet Android ihn direkt (App Link, `public/.well-known/assetlinks.json`); sonst liefert FrankenPHP eine statische Anleitung (`public/join.html`) |
 | Kontingent | Zählt beim Besitzer: `shopping_item.user_id` ist immer der Besitzer der Liste, auch wenn ein Mitglied den Artikel angelegt hat |
 | Grenzen | 20 Mitglieder je Liste, 100 Mitgliedschaften je Konto, 30 Beitrittsversuche pro Stunde und Konto |
 | Konto löschen | Besitzer: Die Liste verschwindet auch bei den Mitgliedern. Mitglied: tritt nur aus |
@@ -443,4 +443,18 @@ Mitgliedschaften ändern sich nur unter der exklusiven Sperre und sind für Inha
 - Mitglieder können die Reihenfolge geteilter Listen nur lokal ändern; ändert der Besitzer die Liste, gilt wieder seine Position.
 - Für den App Link muss in `assetlinks.json` zusätzlich der Fingerprint des **Play-App-Signaturschlüssels** stehen, sobald die App in der Play Console liegt. Bisher stehen dort der Upload-Schlüssel und der Debug-Schlüssel.
 - Keine Liste der Mitglieder (wer genau mitliest) – es gibt keine Namen, nur Konten.
+
+## 13. Live-Updates (Mercure)
+
+Geöffnete Apps (Android und Web) erfahren Änderungen sofort statt erst beim nächsten Intervall-Sync. Der Mercure-Hub läuft in FrankenPHP (`mercure`-Block in `docker/frankenphp/Caddyfile*`), ohne eigenen Container und ohne Persistenz.
+
+- **Nur ein Signal:** Über den Hub geht nie ein Inhalt, nur „es gibt Neues“ als `{"origin": <clientId|null>}`. Der Client synchronisiert daraufhin wie gewohnt; der Sync bleibt die einzige Datenquelle.
+- **Wer bekommt etwas:** jedes Konto, dessen Zähler in der Transaktion gestiegen ist (`VersionPublisher::flush()` liefert sie), gesammelt in `App\Live\LiveUpdates` und **erst nach dem Commit** gesendet (`LiveUpdates::around()`). Schlägt das Senden fehl, wird nur geloggt; der Sync ist nie vom Hub abhängig.
+- **`origin`:** die clientId des auslösenden Geräts, nur auf dem eigenen Konto (das Gerät ignoriert die Meldung). Andere Konten bekommen `null` und erfahren nie fremde clientIds.
+- **Topic:** `urn:spiski:account:<HMAC-SHA256(Konto-ID, APP_SECRET)>`. Die Konto-ID ist das Secret und darf weder im Topic noch im Hub-Log stehen. Updates sind immer `private`.
+- **Abo:** `GET /v1/live` liefert Hub (relativ), Topic und ein Token (1 h), das nur dieses Topic lesen darf. Android schickt es als `Authorization: Bearer`, der Browser per HttpOnly-Cookie `__Secure-mercure_access_token` (Pfad `/.well-known/mercure`), weil EventSource keine Header kann. Abonniert wird mit `?match=<topic>` (Mercure-Protokoll 1.0).
+- **Token:** HS256 mit `MERCURE_JWT_SECRET` (Hub und Symfony lesen denselben Wert, in prod aus `.env.prod`). `iss` = `https://spiski.r3wald.net`, `aud` = `https://spiski.r3wald.net/.well-known/mercure`, im Caddyfile als `issuer` und `resource_identifier` fest eingetragen – feste Kennungen, damit dasselbe Token intern (`http://localhost`), lokal (Port 8081) und hinter dem Nginx gilt.
+- **Logs:** Das Caddyfile filtert den Query-Parameter `authorization` aus den Access-Logs.
+- **Tests:** `tests/Functional/LiveTest.php`; in der Testumgebung ersetzt `App\Tests\Support\RecordingHub` den Hub.
+- **Nginx:** eigener `location /.well-known/mercure` ohne Pufferung und mit langem Timeout (README, „Nginx“).
 
