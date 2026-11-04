@@ -359,6 +359,8 @@ final class SyncService
         usort($outLists, static fn (ShoppingList $a, ShoppingList $b): int => $listVersion($a) <=> $listVersion($b));
         usort($outItems, static fn (ShoppingItem $a, ShoppingItem $b): int => $itemVersion($a) <=> $itemVersion($b));
 
+        $outListIds = array_map(static fn (ShoppingList $l): string => $l->getId()->toRfc4122(), $outLists);
+
         return new SyncResult(
             $serverCursor,
             $hasMore,
@@ -370,7 +372,8 @@ final class SyncService
             $userId,
             $versions,
             $revoked,
-            $this->access->memberCounts(array_map(static fn (ShoppingList $l): string => $l->getId()->toRfc4122(), $outLists)),
+            $this->access->memberCounts($outListIds),
+            $this->access->joinedAt($userId, $outListIds),
         );
     }
 

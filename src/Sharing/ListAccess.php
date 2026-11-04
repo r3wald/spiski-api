@@ -106,6 +106,30 @@ final class ListAccess
     }
 
     /**
+     * Wann dieses Konto den angegebenen Listen beigetreten ist. Eigene Listen
+     * und Listen ohne Mitgliedschaft fehlen im Ergebnis.
+     *
+     * @param list<string> $listIds
+     *
+     * @return array<string, \DateTimeImmutable> Listen-ID => Beitritt
+     */
+    public function joinedAt(string $userId, array $listIds): array
+    {
+        if ([] === $listIds) {
+            return [];
+        }
+
+        /** @var array<string, string> $rows */
+        $rows = $this->connection->fetchAllKeyValue(
+            'SELECT list_id, joined_at FROM list_member WHERE user_id = :user AND list_id IN (:ids)',
+            ['user' => $userId, 'ids' => array_values(array_unique($listIds))],
+            ['ids' => ArrayParameterType::STRING],
+        );
+
+        return array_map(static fn (string $value): \DateTimeImmutable => new \DateTimeImmutable($value), $rows);
+    }
+
+    /**
      * Listen, die dieses Konto besitzt und mit anderen teilt, plus Listen, in
      * denen es Mitglied ist.
      *

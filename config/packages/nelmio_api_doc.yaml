@@ -111,7 +111,14 @@ nelmio_api_doc:
                                   type: integer
                                   minimum: 0
                                   description: Mit wie vielen Konten die Liste geteilt ist (ohne Besitzer).
-                          required: [serverVersion, role, memberCount]
+                              joinedAt:
+                                  type: string
+                                  format: date-time
+                                  nullable: true
+                                  description: >
+                                      Wann das abfragende Konto der Liste beigetreten ist (UTC, ms).
+                                      `null` bei eigenen Listen.
+                          required: [serverVersion, role, memberCount, joinedAt]
 
                 ItemState:
                     description: Der autoritative Serverstand eines Artikels.

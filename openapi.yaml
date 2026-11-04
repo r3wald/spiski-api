@@ -408,6 +408,7 @@ components:
             - serverVersion
             - role
             - memberCount
+            - joinedAt
           properties:
             serverVersion:
               description: 'Version aus dem Zaehler des abfragenden Kontos.'
@@ -423,6 +424,11 @@ components:
               description: 'Mit wie vielen Konten die Liste geteilt ist (ohne Besitzer).'
               type: integer
               minimum: 0
+            joinedAt:
+              description: "Wann das abfragende Konto der Liste beigetreten ist (UTC, ms). `null` bei eigenen Listen.\n"
+              type: string
+              format: date-time
+              nullable: true
           type: object
     ItemState:
       description: 'Der autoritative Serverstand eines Artikels.'

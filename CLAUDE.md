@@ -428,7 +428,7 @@ Mitgliedschaften ändern sich nur unter der exklusiven Sperre und sind für Inha
 
 ### Protokoll-Erweiterungen (abwärtskompatibel)
 
-- Listen in `changes.lists` tragen zusätzlich `role` (`owner`/`member`) und `memberCount`. Sie werden nie gepusht.
+- Listen in `changes.lists` tragen zusätzlich `role` (`owner`/`member`), `memberCount` und `joinedAt` (Beitritt des abfragenden Kontos aus `list_member.joined_at`, `null` bei eigenen Listen). Sie werden nie gepusht.
 - `revokedLists`: Listen-IDs, auf die das Konto keinen Zugriff mehr hat. Der Client löscht sie samt Artikeln, auch mit ausstehenden Änderungen.
 - Neuer Ablehnungsgrund `forbidden`.
 - Artikel in `changes.items` tragen `changedByOther`: `true`, wenn zuletzt ein anderes Konto den Artikel geändert hat (eigene Geräte zählen nicht). Grundlage ist `shopping_item.last_user_id`, das nie ausgeliefert wird. Die App benachrichtigt damit über Änderungen anderer. Wird nie gepusht.

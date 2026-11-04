@@ -58,6 +58,8 @@ final class SyncResponseSerializer
             // Konten sie geteilt ist (CLAUDE.md 12).
             'role' => $list->getUser()->getId()->toRfc4122() === $result->viewerId ? 'owner' : 'member',
             'memberCount' => $result->memberCounts[$id] ?? 0,
+            // Beitritt des abfragenden Kontos; null bei eigenen Listen.
+            'joinedAt' => $this->timestamp($result->joinedAt[$id] ?? null),
         ];
     }
 

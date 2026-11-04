@@ -20,6 +20,7 @@ final class SyncResult
      * @param array<string, int>  $versions       "kind:id" => Version aus dem Zaehler des abfragenden Kontos
      * @param list<string>        $revokedListIds Listen, auf die das Konto keinen Zugriff mehr hat
      * @param array<string, int>  $memberCounts   Listen-ID => Zahl der Mitglieder
+     * @param array<string, \DateTimeImmutable> $joinedAt Listen-ID => Beitritt des abfragenden Kontos (nur Mitgliedschaften)
      */
     public function __construct(
         public readonly int $serverCursor,
@@ -33,6 +34,7 @@ final class SyncResult
         public readonly array $versions = [],
         public readonly array $revokedListIds = [],
         public readonly array $memberCounts = [],
+        public readonly array $joinedAt = [],
     ) {
     }
 }

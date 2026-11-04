@@ -56,11 +56,21 @@ final class SharingTest extends ApiTestCase
         self::assertNotNull($list);
         self::assertSame('member', $list['role']);
         self::assertSame(1, $list['memberCount']);
+        self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/', $list['joinedAt']);
+        self::assertSame(
+            (new \DateTimeImmutable((string) $this->connection()->fetchOne('SELECT joined_at FROM list_member')))
+                ->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z'),
+            $list['joinedAt'],
+        );
         self::assertSame('Milch', self::findRow($response, 'items', $this->itemId)['name'] ?? null);
 
         $ownerView = $this->sync($this->owner, ['since' => 0, 'clientId' => self::uuid()]);
         self::assertSame('owner', self::findRow($ownerView, 'lists', $this->listId)['role'] ?? null);
         self::assertSame(1, self::findRow($ownerView, 'lists', $this->listId)['memberCount'] ?? null);
+        // Eigene Liste: kein Beitritt, das Feld ist aber immer vorhanden.
+        $ownerList = self::findRow($ownerView, 'lists', $this->listId);
+        self::assertArrayHasKey('joinedAt', $ownerList);
+        self::assertNull($ownerList['joinedAt']);
     }
 
     public function testItemChangesReachEveryParticipant(): void
