@@ -16,7 +16,7 @@ namespace App\Admin;
  */
 final class AdminPageRenderer
 {
-    private const COLUMNS = 5;
+    private const COLUMNS = 6;
 
     /**
      * @param array{total: int, ownerCount: int, limit: int, offset: int, lists: list<array<string, mixed>>} $page
@@ -47,7 +47,7 @@ final class AdminPageRenderer
             : '<div class="table-wrap"><table>'
                 .'<caption class="visually-hidden">Listen aller Accounts, zuletzt geändert zuerst</caption>'
                 .'<thead><tr><th scope="col">Liste</th><th scope="col">Account</th>'
-                .'<th scope="col" class="num">Einträge</th><th scope="col">Geändert (UTC)</th>'
+                .'<th scope="col">Zugriff</th><th scope="col" class="num">Einträge</th><th scope="col">Geändert (UTC)</th>'
                 .'<th scope="col">Status</th></tr></thead><tbody>'.$rows.'</tbody></table></div>';
 
         $prev = $offset > 0 ? $this->link('Zurück', $filter, $limit, max(0, $offset - $limit)) : '';
@@ -101,10 +101,32 @@ final class AdminPageRenderer
         return '<tr'.('' === $classes ? '' : ' class="'.$classes.'"').'>'
             .'<td><div class="name">'.$this->dot((int) $list['color']).'<span class="label">'.$this->e((string) $list['name']).'</span></div></td>'
             .'<td><code>'.$this->e((string) $list['owner']).'</code></td>'
+            .'<td>'.$this->access($list).'</td>'
             .'<td class="num">'.$active.' / '.$total.'</td>'
             .'<td><time datetime="'.$this->e((string) $list['updatedAt']).'">'.$this->e($this->display((string) $list['updatedAt'])).'</time></td>'
             .'<td class="status'.($deleted ? ' deleted' : '').'">'.($deleted ? 'gelöscht' : 'aktiv').'</td>'
             .'</tr>'.$itemsRow;
+    }
+
+    /**
+     * Zugriff: nicht geteilt, Code aktiv ohne Mitglied oder geteilt mit der Zahl der
+     * Konten, die die Liste sehen duerfen (Besitzer + Mitglieder).
+     *
+     * @param array<string, mixed> $list
+     */
+    private function access(array $list): string
+    {
+        $members = (int) $list['memberCount'];
+        $codeActive = true === $list['shareCodeActive'];
+
+        if ($members > 0) {
+            return '<span class="tag shared">geteilt</span> <strong>'.(int) $list['userCount'].' Nutzer</strong>'
+                .'<span class="sub">Besitzer + '.$members.(1 === $members ? ' Mitglied' : ' Mitglieder').($codeActive ? ' · Code aktiv' : '').'</span>';
+        }
+
+        return $codeActive
+            ? '<span class="muted-inline">Code aktiv, noch niemand beigetreten</span>'
+            : '<span class="muted-inline">nicht geteilt</span>';
     }
 
     /**
@@ -275,6 +297,9 @@ final class AdminPageRenderer
         li.item.archived .label{text-decoration:line-through;color:var(--muted)}
         .tag{padding:0 8px;font-size:.75rem;color:var(--muted);background:var(--tag);border-radius:999px}
         .tag.danger{color:var(--danger)}
+        .tag.shared{color:var(--accent-text);background:var(--accent)}
+        .sub{display:block;font-size:.8rem;color:var(--muted)}
+        .muted-inline{color:var(--muted);font-size:.9rem}
         .note-text{flex-basis:100%;padding-left:26px;font-size:.85rem;color:var(--muted)}
         .pager{display:flex;justify-content:center;gap:24px;margin-top:16px}
         .pager a{color:var(--accent);font-weight:600}

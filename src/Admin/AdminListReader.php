@@ -14,7 +14,9 @@ use Doctrine\DBAL\Connection;
  *
  * Die Account-UUID ist das Zugangs-Secret des Nutzers (CLAUDE.md 6) und verlaesst
  * die Datenbank nie – stattdessen gibt es ein gehashtes Kuerzel, das nur zum
- * Gruppieren dient. Listennamen, Eintraege und Notizen sind Nutzerinhalt.
+ * Gruppieren dient. Dasselbe gilt fuer den Teilen-Code einer Liste (CLAUDE.md 12):
+ * ausgeliefert wird nur, ob er aktiv ist. Listennamen, Eintraege und Notizen sind
+ * Nutzerinhalt.
  */
 final class AdminListReader
 {
@@ -81,7 +83,12 @@ final class AdminListReader
                     SELECT l.id, l.user_id, l.name, l.color, l.sort_order,
                            l.created_at, l.updated_at, l.deleted_at,
                            COUNT(i.id) AS item_count,
-                           COUNT(i.id) FILTER (WHERE i.deleted_at IS NULL) AS active_item_count
+                           COUNT(i.id) FILTER (WHERE i.deleted_at IS NULL) AS active_item_count,
+                           -- Unterabfrage statt zweitem JOIN: ein JOIN auf list_member wuerde jede
+                           -- Artikelzeile je Mitglied vervielfachen und die Zaehler verfaelschen.
+                           (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count,
+                           -- Nur ob ein Code aktiv ist, nie der Code selbst: wer ihn kennt, kann beitreten.
+                           (l.share_code IS NOT NULL) AS share_code_active
                     FROM shopping_list l
                     LEFT JOIN shopping_item i ON i.list_id = l.id
                     %s
@@ -107,7 +114,7 @@ final class AdminListReader
                 'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
                 'itemCount' => (int) $row['item_count'],
                 'activeItemCount' => (int) $row['active_item_count'],
-            ];
+            ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']));
         }
 
         if ($includeItems && [] !== $lists) {
@@ -168,6 +175,24 @@ final class AdminListReader
         }
 
         return $byList;
+    }
+
+    /**
+     * Geteilt heisst: mindestens ein Mitglied (wie auf der Statusseite). Der
+     * Besitzer ist kein Mitglied, darf die Liste aber natuerlich sehen: Zugriff
+     * haben `memberCount + 1` Konten. Ein aktiver Code ohne Mitglied ist
+     * vorbereitet, aber noch nicht geteilt.
+     *
+     * @return array{shared: bool, memberCount: int, userCount: int, shareCodeActive: bool}
+     */
+    private function sharing(int $memberCount, bool $shareCodeActive): array
+    {
+        return [
+            'shared' => $memberCount > 0,
+            'memberCount' => $memberCount,
+            'userCount' => $memberCount + 1,
+            'shareCodeActive' => $shareCodeActive,
+        ];
     }
 
     private function ownerRef(string $accountId): string

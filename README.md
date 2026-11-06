@@ -96,7 +96,7 @@ HTTP-Status ist `503` bei `down`, sonst `200` – ein externer Monitor muss nur 
 
 ## Admin-Seite
 
-`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, Einträge (aktiv / gesamt), letzte Änderung (UTC) und Status. Unter jeder Liste klappen **ihre Einträge** auf (Menge, Einheit, Name wie in der App; dazu Notiz sowie die Kennzeichen *erledigt*, *verschoben* und *archiviert*). **Archivierte** (gelöschte) Einträge sind standardmäßig ausgeblendet und lassen sich einblenden; die Zusammenfassung nennt ihre Zahl. Die Seite lässt sich nach Listenname oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
+`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, **Zugriff** (ob und mit wie vielen Nutzern die Liste geteilt ist), Einträge (aktiv / gesamt), letzte Änderung (UTC) und Status. Unter jeder Liste klappen **ihre Einträge** auf (Menge, Einheit, Name wie in der App; dazu Notiz sowie die Kennzeichen *erledigt*, *verschoben* und *archiviert*). **Archivierte** (gelöschte) Einträge sind standardmäßig ausgeblendet und lassen sich einblenden; die Zusammenfassung nennt ihre Zahl. Die Seite lässt sich nach Listenname oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
 
 **Das Token wird bei jedem Request mitgeschickt**, im Header:
 
@@ -123,6 +123,8 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin
 | `includeItems=1` | die Einträge jeder Liste unter `items` mitliefern | – | ja |
 | `includeArchivedItems=1` | dabei auch archivierte Einträge (nur zusammen mit `includeItems=1`) | – | ja |
 | `limit`, `offset` | Seitengröße (Standard 50 bzw. 100, höchstens 500) und Versatz | ja | ja |
+
+**Zugriff / Teilen.** Die Spalte zeigt, ob eine Liste geteilt ist (mindestens ein Mitglied, wie auf der Statusseite) und wie viele Nutzer sie sehen dürfen, **Besitzer + Mitglieder**: „geteilt · 3 Nutzer, Besitzer + 2 Mitglieder". Ist ein Teilen-Code aktiv, aber noch niemand beigetreten, steht dort „Code aktiv, noch niemand beigetreten" (noch nicht geteilt, 1 Nutzer). Der Code selbst wird **nie** angezeigt: Wer ihn kennt, kann der Liste beitreten. Im JSON stehen dazu pro Liste `shared`, `memberCount` (ohne Besitzer), `userCount` (Besitzer + Mitglieder) und `shareCodeActive`.
 
 Token erzeugen und wechseln:
 

@@ -470,6 +470,96 @@ final class AdminTest extends ApiTestCase
         self::assertStringNotContainsString($accountB, $raw);
     }
 
+    public function testListsShowWhetherAndWithHowManyUsersTheyAreShared(): void
+    {
+        $this->seed();
+        $owner = $this->accountOfList('Wocheneinkauf');
+        $this->share($owner, $this->listId('Wocheneinkauf'), [self::uuid(), self::uuid()]);
+        $this->share($this->accountOfList('Drogerie'), $this->listId('Drogerie'), []); // Code ohne Mitglied
+
+        $lists = $this->listsByName($this->getLists());
+
+        $shared = $lists['Wocheneinkauf'];
+        self::assertTrue($shared['shared']);
+        self::assertSame(2, $shared['memberCount'], 'Mitglieder ohne den Besitzer');
+        self::assertSame(3, $shared['userCount'], 'Zugriff haben Besitzer + Mitglieder');
+        self::assertTrue($shared['shareCodeActive']);
+        self::assertSame(2, $shared['itemCount'], 'Mitglieder duerfen die Artikelzaehler nicht vervielfachen (JOIN).');
+        self::assertSame(1, $shared['activeItemCount']);
+
+        $prepared = $lists['Drogerie'];
+        self::assertFalse($prepared['shared'], 'Ein Code ohne Mitglied ist noch nicht geteilt (wie auf der Statusseite).');
+        self::assertSame(0, $prepared['memberCount']);
+        self::assertSame(1, $prepared['userCount']);
+        self::assertTrue($prepared['shareCodeActive']);
+
+        $private = $lists['Altlast'];
+        self::assertFalse($private['shared']);
+        self::assertSame(1, $private['userCount']);
+        self::assertFalse($private['shareCodeActive']);
+    }
+
+    public function testPageShowsTheSharingState(): void
+    {
+        $this->seed();
+        $this->share($this->accountOfList('Wocheneinkauf'), $this->listId('Wocheneinkauf'), [self::uuid(), self::uuid()]);
+        $this->share($this->accountOfList('Drogerie'), $this->listId('Drogerie'), []);
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('<th scope="col">Zugriff</th>', $html);
+        self::assertStringContainsString('<span class="tag shared">geteilt</span>', $html);
+        self::assertStringContainsString('<strong>3 Nutzer</strong>', $html);
+        self::assertStringContainsString('Besitzer + 2 Mitglieder · Code aktiv', $html);
+        self::assertStringContainsString('Code aktiv, noch niemand beigetreten', $html);
+        self::assertStringContainsString('nicht geteilt', $html);
+    }
+
+    public function testSingleMemberUsesTheSingular(): void
+    {
+        $this->seed();
+        $this->share($this->accountOfList('Drogerie'), $this->listId('Drogerie'), [self::uuid()]);
+
+        $html = $this->getPage('/admin');
+
+        self::assertStringContainsString('<strong>2 Nutzer</strong>', $html);
+        self::assertStringContainsString('Besitzer + 1 Mitglied ·', $html);
+        self::assertStringNotContainsString('1 Mitglieder', $html);
+    }
+
+    public function testEndingTheSharingResetsTheDisplay(): void
+    {
+        $this->seed();
+        $owner = $this->accountOfList('Wocheneinkauf');
+        $listId = $this->listId('Wocheneinkauf');
+        $this->share($owner, $listId, [self::uuid()]);
+
+        $this->client->request('DELETE', '/v1/lists/'.$listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$owner]);
+        self::assertSame(204, $this->client->getResponse()->getStatusCode());
+
+        $list = $this->listsByName($this->getLists())['Wocheneinkauf'];
+        self::assertFalse($list['shared']);
+        self::assertSame(1, $list['userCount']);
+        self::assertFalse($list['shareCodeActive']);
+    }
+
+    public function testShareCodeAndMemberAccountsAreNeverExposed(): void
+    {
+        $this->seed();
+        $member = self::uuid();
+        $code = $this->share($this->accountOfList('Wocheneinkauf'), $this->listId('Wocheneinkauf'), [$member]);
+
+        $this->getLists('includeItems=1');
+        $json = (string) $this->client->getResponse()->getContent();
+        $html = $this->getPage('/admin?archivedItems=1&open=1');
+
+        foreach ([$json, $html] as $body) {
+            self::assertStringNotContainsString($code, $body, 'Der Teilen-Code ist ein Zugangs-Secret.');
+            self::assertStringNotContainsString($member, $body);
+            self::assertStringNotContainsString(hash('sha256', $member), $body);
+        }
+    }
+
     /**
      * Zwei Accounts, drei Listen, davon eine geloescht. Gibt die Account-UUIDs zurueck.
      *
@@ -541,6 +631,37 @@ final class AdminTest extends ApiTestCase
         }
 
         return $byName;
+    }
+
+    /**
+     * Teilt eine Liste ueber die echten Endpunkte (Code erzeugen, beitreten) und gibt den Code zurueck.
+     *
+     * @param list<string> $members Konto-UUIDs der Mitglieder
+     */
+    private function share(string $owner, string $listId, array $members): string
+    {
+        $this->client->request('POST', '/v1/lists/'.$listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$owner]);
+        self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        /** @var array{code: string} $share */
+        $share = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+
+        foreach ($members as $member) {
+            $this->sync($member, ['since' => 0, 'clientId' => self::uuid()]);
+            $this->client->request('POST', '/v1/shares/'.$share['code'], server: ['HTTP_AUTHORIZATION' => 'Bearer '.$member]);
+            self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        }
+
+        return $share['code'];
+    }
+
+    private function listId(string $name): string
+    {
+        return (string) $this->connection()->fetchOne('SELECT id FROM shopping_list WHERE name = :name', ['name' => $name]);
+    }
+
+    private function accountOfList(string $name): string
+    {
+        return (string) $this->connection()->fetchOne('SELECT user_id FROM shopping_list WHERE name = :name', ['name' => $name]);
     }
 
     private function getPage(string $uri): string
