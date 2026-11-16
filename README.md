@@ -70,6 +70,8 @@ curl -s -X POST localhost:8081/v1/sync \
 | `GET` | `/status.json`, `/status.html` | – (Statusseite, siehe unten) |
 | `GET` | `/` | – |
 | `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
+| `GET`, `POST` | `/admin/items/{id}/delete` | Admin-Token im Header; `POST` zusätzlich Bestätigungstoken (Eintrag löschen) |
+| `GET`, `POST` | `/admin/lists/{id}/delete` | wie oben (ganze Liste löschen) |
 | `GET` | `/v1/admin/lists` | Admin-Token |
 
 `/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). FrankenPHP liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/frankenphp/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
@@ -140,6 +142,15 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin
 | `limit`, `offset` | Seitengröße (Standard 50 bzw. 100, höchstens 500) und Versatz | ja | ja |
 
 **Zugriff / Teilen.** Die Spalte zeigt, ob eine Liste geteilt ist (mindestens ein Mitglied, wie auf der Statusseite) und wie viele Nutzer sie sehen dürfen, **Besitzer + Mitglieder**: „geteilt · 3 Nutzer, Besitzer + 2 Mitglieder". Ist ein Teilen-Code aktiv, aber noch niemand beigetreten, steht dort „Code aktiv, noch niemand beigetreten" (noch nicht geteilt, 1 Nutzer). Der Code selbst wird **nie** angezeigt: Wer ihn kennt, kann der Liste beitreten. Im JSON stehen dazu pro Liste `shared`, `memberCount` (ohne Besitzer), `userCount` (Besitzer + Mitglieder) und `shareCodeActive`.
+
+**Einträge und Listen löschen.** Jeder nicht archivierte Eintrag und jede nicht gelöschte Liste (Spalte *Status*) hat einen Link **Löschen**. Er führt auf eine Bestätigungsseite (`GET /admin/items/{id}/delete`). Sie zeigt den Eintrag bzw. die Liste (mit Zahl der Einträge), das Account-Kürzel und wie viele Nutzer betroffen sind, und ändert noch nichts. Erst **„Ja, … löschen“** schickt das Formular ab (`POST`; für Listen `/admin/lists/{id}/delete`). Danach geht es zurück zur Übersicht mit demselben Filter, und ein Hinweis bestätigt das Löschen.
+
+- **Wirkung wie in der App:** Der Eintrag wird archiviert (Tombstone), nicht hart entfernt, und verschwindet beim nächsten Sync auf allen Geräten aller Nutzer der Liste – bei geteilten Listen also auch bei den Mitgliedern. Geöffnete Apps erfahren es sofort per Live-Update. Ein hartes Löschen ginge nicht: Das nächste Gerät mit dem alten Stand würde den Eintrag per Sync wieder anlegen.
+- **Gegen Wiederauferstehung:** Der Tombstone ist immer neuer als der bisherige Stand. Ein Gerät, das seinen alten Stand erneut schickt, verliert den Last-Write-Wins-Vergleich und bekommt den Tombstone zurück. Ändert ein Nutzer den Eintrag danach in der App, gilt wie immer die spätere Änderung.
+- **Listen** werden wie in der App gelöscht: Nur die Liste bekommt den Tombstone, ihre Einträge bleiben unverändert und verschwinden mit ihr. Der Besitzer findet sie danach im **Archiv** der App und kann sie wiederherstellen. Mitgliedschaften und Teilen-Code bleiben; nach einer Wiederherstellung sehen die Mitglieder sie wieder.
+- **Verschlüsselte Einträge und Listen** lassen sich genauso löschen; der Chiffretext bleibt unberührt.
+- **Schutz gegen fremde Formulare (CSRF):** Eine Header-Erweiterung schickt das Admin-Token bei *jeder* Anfrage an die Domain mit, auch bei einem Formular, das eine fremde Website abschickt. Deshalb verlangt der `POST` ein Bestätigungstoken, das nur auf der Bestätigungsseite steht (HMAC mit `APP_SECRET`, eine Stunde gültig, an Aktion und Eintrag bzw. Liste gebunden). Zusätzlich lehnt er Browser-Anfragen ab, deren `Sec-Fetch-Site` nicht `same-origin` ist. Fehlt das Token oder ist es abgelaufen: `403`, nichts geändert.
+- Doppelt abgeschickt (Neuladen, Zurück-Taste): Eintrag bzw. Liste sind schon gelöscht, es passiert nichts mehr.
 
 Token erzeugen und wechseln:
 

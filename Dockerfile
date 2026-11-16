@@ -16,8 +16,11 @@ RUN apt-get update \
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
+# vendor/bin hinten angehaengt: phpunit, phpstan & Co. ohne Pfad aufrufbar, ohne
+# System-Binaries zu ueberdecken. In prod fehlen die Dev-Werkzeuge (--no-dev).
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
-    COMPOSER_HOME=/tmp/composer
+    COMPOSER_HOME=/tmp/composer \
+    PATH="${PATH}:/app/vendor/bin"
 
 WORKDIR /app
 

@@ -1,5 +1,15 @@
+# inside = local php container (/.dockerenv) or GitLab CI job (GITLAB_CI=true;
+# the Kubernetes runners have no /.dockerenv). Deliberately not CI: many local
+# tools and agent shells set CI=true on the host.
+ifeq ($(wildcard /.dockerenv)$(GITLAB_CI),)
+IN_PHP=docker compose exec php
+CONTEXT=outside
+else
+IN_PHP=
+CONTEXT=inside
+endif
+
 DC  := docker compose
-PHP := $(DC) run --rm php
 
 # Server-Stacks aus compose.prod.yaml, je Stage eigenes Compose-Projekt (Container,
 # Netz, Datenbank-Volume), eigene Env-Datei, eigener Image-Tag und eigener Port.
@@ -32,29 +42,32 @@ logs: ## Logs folgen
 	$(DC) logs -f php
 
 shell: ## Shell im PHP-Container
-	$(DC) run --rm php bash
+	$(IN_PHP) bash
 
 install: ## Abhaengigkeiten installieren
-	$(PHP) composer install
+	$(IN_PHP) composer install
 
 migrate: ## Migrations auf die Entwicklungsdatenbank anwenden
-	$(PHP) bin/console doctrine:migrations:migrate --no-interaction
+	$(IN_PHP) bin/console doctrine:migrations:migrate --no-interaction
 
 diff: ## Neue Migration aus dem Entity-Stand erzeugen
-	$(PHP) bin/console doctrine:migrations:diff --no-interaction
+	$(IN_PHP) bin/console doctrine:migrations:diff --no-interaction
 
 test: ## Testsuite gegen PostgreSQL
-	$(PHP) vendor/bin/phpunit
+	$(IN_PHP) vendor/bin/phpunit
 
 stan: ## Statische Analyse (Level 6)
-	$(PHP) vendor/bin/phpstan analyse --memory-limit=512M --no-progress
+	$(IN_PHP) vendor/bin/phpstan analyse --memory-limit=512M --no-progress
 
+# Die Ausgabe wird im Container in die Datei geschrieben, nicht per Umleitung auf dem
+# Host: `docker compose exec` haengt sonst ein TTY an, und die Datei bekaeme \r\n.
+# var/ liegt im Bind-Mount und ist innen wie aussen derselbe Pfad.
 openapi: ## openapi.yaml neu erzeugen
-	$(PHP) bash -c 'bin/console nelmio:apidoc:dump --format=yaml --no-pretty 2>/dev/null' > openapi.yaml
+	$(IN_PHP) bash -c 'bin/console nelmio:apidoc:dump --format=yaml --no-pretty 2>/dev/null > openapi.yaml'
 
 openapi-check: ## Pruefen, ob openapi.yaml zum Code passt
-	@$(PHP) bash -c 'bin/console nelmio:apidoc:dump --format=yaml --no-pretty 2>/dev/null' > /tmp/openapi.generated.yaml
-	@diff -u openapi.yaml /tmp/openapi.generated.yaml \
+	@$(IN_PHP) bash -c 'bin/console nelmio:apidoc:dump --format=yaml --no-pretty 2>/dev/null > var/openapi.generated.yaml'
+	@diff -u openapi.yaml var/openapi.generated.yaml \
 		&& echo "openapi.yaml ist aktuell." \
 		|| (echo "openapi.yaml weicht vom Code ab – 'make openapi' ausfuehren."; exit 1)
 

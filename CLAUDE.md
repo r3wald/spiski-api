@@ -191,6 +191,7 @@ Vergleich der eingehenden Zeile mit dem Serverstand derselben `id`:
 - Die `accountId` wird als `Authorization: Bearer <uuid>` gesendet. Es gibt kein Passwort, keinen Refresh-Token – die UUID **ist** das Secret. Die `clientId` ist kein Secret und dient ausschließlich als Tiebreaker.
 - Ein Custom Symfony Security-Authenticator liest den Bearer-Token, validiert das UUID-Format und legt bei erstem Kontakt automatisch einen `User`-Datensatz an (kein Registrierungs-Endpoint nötig).
 - Die Admin-Seite (`GET /admin`, serverseitig gerendertes HTML, und `GET /v1/admin/lists`, JSON) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: kein Formular, keine Session, kein Cookie, kein JavaScript, ein Token in der URL wird nicht akzeptiert. Eigene Firewall, IP-Limit 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel. Gezeigt werden Listen und ihre Einträge (archivierte nur auf Wunsch) als Nutzerinhalt sowie je Liste, ob sie geteilt ist und wie viele Konten (Besitzer + Mitglieder) sie sehen dürfen – nie der Teilen-Code, nur ob er aktiv ist.
+- **Einträge und Listen löschen von der Admin-Seite** (`App\Admin\AdminDeleter`): zweistufig, ohne JavaScript – `GET /admin/items/{id}/delete` bzw. `/admin/lists/{id}/delete` zeigt die Bestätigung, erst der `POST` von dort löscht. Eine Liste bekommt wie in der App nur selbst den Tombstone (Artikel, Mitgliedschaften und Teilen-Code bleiben; der Besitzer kann sie aus dem Archiv der App wiederherstellen). Gelöscht wird als **Tombstone** wie in der App, nie hart (eine hart gelöschte Zeile legte der nächste Push wieder an): exklusive `SyncLock`, Kontozeilen der Zielgruppe sperren, neue Version in jedem Konto der Liste (`VersionPublisher`), `updated_at = deleted_at` strikt nach dem bisherigen Stand, `last_client_id` = `ffffffff-…` (gewinnt Gleichstände), bei Artikeln `last_user_id = NULL` (kein `changedByOther`), Live-Update nach dem Commit. **CSRF:** Header-Erweiterungen hängen das Admin-Token auch an Formulare fremder Seiten. Deshalb braucht der `POST` ein Bestätigungstoken von der Bestätigungsseite (`App\Admin\AdminConfirmation`: HMAC über Aktion, Ziel und Ablauf mit `APP_SECRET`, 1 h gültig) und wird bei `Sec-Fetch-Site` ≠ `same-origin` abgelehnt.
 - Da der Besitz der UUID vollen Zugriff gewährt, ist Transportsicherheit Pflicht: nur HTTPS, HSTS.
 - Kein Logging von UUIDs im Klartext in Applikationslogs (nur gehasht, falls überhaupt), um das Risiko bei Log-Leaks zu minimieren.
 
@@ -237,6 +238,8 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `GET` | `/status.json`, `/status.html` | nein | Statusseite: API-Version, Revision, DB, Schema, Summen über alle Konten. IP-Limit 60/Minute. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
+| `GET`, `POST` | `/admin/items/{id}/delete` | Admin-Token (+ Bestätigungstoken) | Eintrag löschen: GET zeigt die Bestätigung, POST archiviert. Nicht in der OpenAPI-Spezifikation |
+| `GET`, `POST` | `/admin/lists/{id}/delete` | Admin-Token (+ Bestätigungstoken) | Liste löschen, ebenso. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/datenschutz/` | nein | Datenschutzerklärung, statisch (`public/datenschutz/index.html`), von FrankenPHP ohne PHP ausgeliefert. Nicht in der OpenAPI-Spezifikation |
 
 ### Fehlerformat
@@ -280,6 +283,8 @@ api/
       AdminListReader.php      // Lese-Abfrage für die Admin-Seite (DBAL)
       AdminPageRenderer.php    // HTML der Admin-Seite, ohne JavaScript
       AdminPageLimits.php
+      AdminDeleter.php         // Eintrag/Liste löschen (Tombstone, Versionen für alle Teilnehmer)
+      AdminConfirmation.php    // Bestätigungstoken gegen CSRF (HMAC, befristet)
     Command/
       PurgePlaintextCommand.php   // app:purge-plaintext, Frist-Job (Abschnitt 14)
     Controller/

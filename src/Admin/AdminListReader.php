@@ -144,26 +144,118 @@ final class AdminListReader
     }
 
     /**
+     * Ein einzelner Eintrag samt seiner Liste, fuer die Bestaetigungsseite beim Loeschen.
+     *
+     * @return array{item: array<string, mixed>, list: array<string, mixed>}|null
+     */
+    public function item(string $itemId): ?array
+    {
+        /** @var array<string, mixed>|false $row */
+        $row = $this->connection->fetchAssociative(
+            <<<'SQL'
+                SELECT l.id, l.user_id, l.name, l.color, l.deleted_at, (l.enc IS NOT NULL) AS encrypted,
+                       (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count
+                FROM shopping_item i
+                JOIN shopping_list l ON l.id = i.list_id
+                WHERE i.id = :id
+                SQL,
+            ['id' => $itemId],
+        );
+        if (false === $row) {
+            return null;
+        }
+
+        $listId = (string) $row['id'];
+        $items = $this->itemsByList([$listId], true, $itemId)[$listId] ?? [];
+        if ([] === $items) {
+            return null;
+        }
+
+        $encrypted = $this->toBool($row['encrypted']);
+        $members = (int) $row['member_count'];
+
+        return [
+            'item' => $items[0],
+            'list' => [
+                'id' => $listId,
+                'owner' => $this->ownerRef((string) $row['user_id']),
+                'encrypted' => $encrypted,
+                'name' => $encrypted ? null : (string) $row['name'],
+                'color' => (int) $row['color'],
+                'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
+                'memberCount' => $members,
+                'userCount' => $members + 1,
+            ],
+        ];
+    }
+
+    /**
+     * Eine einzelne Liste mit Zaehlern, fuer die Bestaetigungsseite beim Loeschen.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function list(string $listId): ?array
+    {
+        /** @var array<string, mixed>|false $row */
+        $row = $this->connection->fetchAssociative(
+            <<<'SQL'
+                SELECT l.id, l.user_id, l.name, l.color, l.updated_at, l.deleted_at, (l.enc IS NOT NULL) AS encrypted,
+                       (SELECT COUNT(*) FROM shopping_item i WHERE i.list_id = l.id) AS item_count,
+                       (SELECT COUNT(*) FROM shopping_item i WHERE i.list_id = l.id AND i.deleted_at IS NULL) AS active_item_count,
+                       (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count,
+                       (l.share_code IS NOT NULL) AS share_code_active
+                FROM shopping_list l
+                WHERE l.id = :id
+                SQL,
+            ['id' => $listId],
+        );
+        if (false === $row) {
+            return null;
+        }
+
+        $encrypted = $this->toBool($row['encrypted']);
+
+        return [
+            'id' => (string) $row['id'],
+            'owner' => $this->ownerRef((string) $row['user_id']),
+            'encrypted' => $encrypted,
+            'name' => $encrypted ? null : (string) $row['name'],
+            'color' => (int) $row['color'],
+            'updatedAt' => $this->timestamp((string) $row['updated_at']),
+            'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
+            'itemCount' => (int) $row['item_count'],
+            'activeItemCount' => (int) $row['active_item_count'],
+        ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']));
+    }
+
+    /**
      * Eine einzige Abfrage fuer alle Listen der Seite statt einer je Liste.
      *
      * @param list<string> $listIds
      *
      * @return array<string, list<array<string, mixed>>> Eintraege je Listen-ID, in der Reihenfolge der App
      */
-    private function itemsByList(array $listIds, bool $includeArchived): array
+    private function itemsByList(array $listIds, bool $includeArchived, ?string $onlyItemId = null): array
     {
+        $conditions = $includeArchived ? '' : ' AND deleted_at IS NULL';
+        $params = ['ids' => $listIds];
+        if (null !== $onlyItemId) {
+            $conditions .= ' AND id = :item';
+            $params['item'] = $onlyItemId;
+        }
+
         $rows = $this->connection->fetchAllAssociative(
             \sprintf(
                 <<<'SQL'
                     SELECT id, list_id, name, quantity, unit, is_checked, note, sort_order,
                            created_at, updated_at, deleted_at, moved_at, (enc IS NOT NULL) AS encrypted
                     FROM shopping_item
-                    WHERE list_id IN (:ids) %s
+                    WHERE list_id IN (:ids)%s
                     ORDER BY list_id, sort_order, created_at, id
                     SQL,
-                $includeArchived ? '' : 'AND deleted_at IS NULL',
+                $conditions,
             ),
-            ['ids' => $listIds],
+            $params,
             ['ids' => ArrayParameterType::STRING],
         );
 
