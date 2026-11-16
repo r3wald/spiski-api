@@ -17,6 +17,10 @@ final class HealthAndAuthTest extends ApiTestCase
         $body = json_decode((string) $response->getContent(), true, 512, \JSON_THROW_ON_ERROR);
         self::assertSame('ok', $body['status']);
         self::assertSame('up', $body['database']);
+        self::assertSame(
+            static::getContainer()->getParameter('spiski.api_version'),
+            $body['version'],
+        );
     }
 
     public function testSyncWithoutTokenIsUnauthorized(): void

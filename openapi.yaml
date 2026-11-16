@@ -801,6 +801,7 @@ components:
       required:
         - status
         - database
+        - version
       properties:
         status:
           type: string
@@ -812,6 +813,10 @@ components:
           enum:
             - up
             - down
+        version:
+          description: 'Version der API (wie in `info.version` dieser Beschreibung).'
+          type: string
+          example: 1.1.0
       type: object
   parameters:
     ProtocolHeader:

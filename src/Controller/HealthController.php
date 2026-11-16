@@ -7,6 +7,7 @@ namespace App\Controller;
 use Doctrine\DBAL\Connection;
 use OpenApi\Attributes as OA;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -14,6 +15,8 @@ final class HealthController
 {
     public function __construct(
         private readonly Connection $connection,
+        #[Autowire('%spiski.api_version%')]
+        private readonly string $apiVersion,
     ) {
     }
 
@@ -39,6 +42,9 @@ final class HealthController
             [
                 'status' => $databaseUp ? 'ok' : 'degraded',
                 'database' => $databaseUp ? 'up' : 'down',
+                // Steht auch auf der Statusseite; die App zeigt sie in den
+                // Einstellungen an.
+                'version' => $this->apiVersion,
             ],
             $databaseUp ? Response::HTTP_OK : Response::HTTP_SERVICE_UNAVAILABLE,
         );

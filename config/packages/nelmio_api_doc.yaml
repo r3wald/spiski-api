@@ -365,7 +365,11 @@ nelmio_api_doc:
                     properties:
                         status: { type: string, enum: [ok, degraded] }
                         database: { type: string, enum: [up, down] }
-                    required: [status, database]
+                        version:
+                            type: string
+                            example: '1.1.0'
+                            description: Version der API (wie in `info.version` dieser Beschreibung).
+                    required: [status, database, version]
         security:
             - AccountUuid: []
     areas:
