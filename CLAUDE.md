@@ -458,7 +458,7 @@ Mitgliedschaften ändern sich nur unter der exklusiven Sperre und sind für Inha
 ### Offen
 
 - Mitglieder können die Reihenfolge geteilter Listen nur lokal ändern; ändert der Besitzer die Liste, gilt wieder seine Position.
-- Für den App Link muss in `assetlinks.json` zusätzlich der Fingerprint des **Play-App-Signaturschlüssels** stehen, sobald die App in der Play Console liegt. Bisher stehen dort der Upload-Schlüssel und der Debug-Schlüssel.
+- `assetlinks.json` enthält für `net.r3wald.spiski` Upload-, Debug- und Play-App-Signaturschlüssel, für die Dev-App `net.r3wald.spiski.dev` den Debug-Schlüssel. Die Dev-App öffnet nur Links von `spiski-dev.r3wald.net` (Staging), Release-Builds nur `spiski.r3wald.net` (`app/docs/05-geteilte-listen.md`, „App Link“).
 - Keine Liste der Mitglieder (wer genau mitliest) – es gibt keine Namen, nur Konten.
 
 ## 13. Live-Updates (Mercure)
