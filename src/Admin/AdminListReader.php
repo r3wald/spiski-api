@@ -17,6 +17,11 @@ use Doctrine\DBAL\Connection;
  * Gruppieren dient. Dasselbe gilt fuer den Teilen-Code einer Liste (CLAUDE.md 12):
  * ausgeliefert wird nur, ob er aktiv ist. Listennamen, Eintraege und Notizen sind
  * Nutzerinhalt.
+ *
+ * Verschluesselte Zeilen (CLAUDE.md 14) kann der Server nicht lesen: `name` ist
+ * dann `null` und `encrypted` `true`; der Chiffretext selbst wird nicht
+ * ausgeliefert. Je Liste steht der Zustand des Besitzerkontos in
+ * `encryptionState`.
  */
 final class AdminListReader
 {
@@ -28,8 +33,8 @@ final class AdminListReader
     }
 
     /**
-     * @param string $query                Teilstring des Listennamens (ohne Beachtung der Gross-/Kleinschreibung)
-     *                                     oder Anfang eines Account-Kuerzels; leer = kein Filter
+     * @param string $query                Teilstring des Listennamens (ohne Beachtung der Gross-/Kleinschreibung,
+     *                                     nur unverschluesselte Listen) oder Anfang eines Account-Kuerzels; leer = kein Filter
      * @param bool   $includeItems         die Eintraege jeder Liste unter `items` mitliefern
      * @param bool   $includeArchivedItems dabei auch archivierte (soft-geloeschte) Eintraege
      *
@@ -60,7 +65,7 @@ final class AdminListReader
             // Das Kuerzel wird in der Datenbank mit demselben Verfahren gebildet wie in
             // ownerRef(): SHA-256 der kanonischen (kleingeschriebenen) UUID.
             $conditions[] = <<<'SQL'
-                (l.name ILIKE :like ESCAPE '\'
+                ((l.enc IS NULL AND l.name ILIKE :like ESCAPE '\')
                  OR left(encode(sha256(convert_to(l.user_id::text, 'UTF8')), 'hex'), 12) LIKE :owner ESCAPE '\')
                 SQL;
             $params['like'] = '%'.$this->escapeLike($query).'%';
@@ -88,7 +93,9 @@ final class AdminListReader
                            -- Artikelzeile je Mitglied vervielfachen und die Zaehler verfaelschen.
                            (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count,
                            -- Nur ob ein Code aktiv ist, nie der Code selbst: wer ihn kennt, kann beitreten.
-                           (l.share_code IS NOT NULL) AS share_code_active
+                           (l.share_code IS NOT NULL) AS share_code_active,
+                           (l.enc IS NOT NULL) AS encrypted,
+                           (SELECT u.encryption_state FROM app_user u WHERE u.id = l.user_id) AS encryption_state
                     FROM shopping_list l
                     LEFT JOIN shopping_item i ON i.list_id = l.id
                     %s
@@ -103,10 +110,13 @@ final class AdminListReader
 
         $lists = [];
         foreach ($rows as $row) {
+            $encrypted = $this->toBool($row['encrypted']);
             $lists[] = [
                 'id' => (string) $row['id'],
                 'owner' => $this->ownerRef((string) $row['user_id']),
-                'name' => (string) $row['name'],
+                'encryptionState' => (string) $row['encryption_state'],
+                'encrypted' => $encrypted,
+                'name' => $encrypted ? null : (string) $row['name'],
                 'color' => (int) $row['color'],
                 'sortOrder' => (int) $row['sort_order'],
                 'createdAt' => $this->timestamp((string) $row['created_at']),
@@ -146,7 +156,7 @@ final class AdminListReader
             \sprintf(
                 <<<'SQL'
                     SELECT id, list_id, name, quantity, unit, is_checked, note, sort_order,
-                           created_at, updated_at, deleted_at, moved_at
+                           created_at, updated_at, deleted_at, moved_at, (enc IS NOT NULL) AS encrypted
                     FROM shopping_item
                     WHERE list_id IN (:ids) %s
                     ORDER BY list_id, sort_order, created_at, id
@@ -159,9 +169,11 @@ final class AdminListReader
 
         $byList = [];
         foreach ($rows as $row) {
+            $encrypted = $this->toBool($row['encrypted']);
             $byList[(string) $row['list_id']][] = [
                 'id' => (string) $row['id'],
-                'name' => (string) $row['name'],
+                'encrypted' => $encrypted,
+                'name' => $encrypted ? null : (string) $row['name'],
                 'quantity' => null === $row['quantity'] ? null : (float) $row['quantity'],
                 'unit' => null === $row['unit'] ? null : (string) $row['unit'],
                 'isChecked' => $this->toBool($row['is_checked']),

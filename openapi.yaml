@@ -1,8 +1,8 @@
 openapi: 3.0.0
 info:
   title: 'Spiski Sync API'
-  description: "Synchronisiert Einkaufslisten und Artikel der Spiski-App zwischen\nGeraeten desselben Nutzers. Es gibt keinen klassischen Account:\ndie Authentifizierung erfolgt ueber eine client-generierte\nAccount-UUID als Bearer-Token.\n\nAlle Zeitstempel sind ISO-8601 in UTC mit Millisekunden\n(`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins\nueber `(updatedAt, clientId)` aufgeloest.\n"
-  version: 1.0.0
+  description: "Synchronisiert Einkaufslisten und Artikel der Spiski-App zwischen\nGeraeten desselben Nutzers. Es gibt keinen klassischen Account:\ndie Authentifizierung erfolgt ueber eine client-generierte\nAccount-UUID als Bearer-Token.\n\nAlle Zeitstempel sind ISO-8601 in UTC mit Millisekunden\n(`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins\nueber `(updatedAt, clientId)` aufgeloest.\n\nEnde-zu-Ende-Verschluesselung: Clients, die sie beherrschen, senden\nauf jedem Request `X-Spiski-Protocol: 2`. Verschluesselte Zeilen\ntragen `enc` (Chiffretext `v1.<nonce>.<chiffretext>`) statt der\nKlartext-Felder; der Server sieht nie einen Schluessel. Konten in\n`migrating`/`encrypted` – und nach Ablauf der Frist alle Konten –\nbekommen ohne den Header `426 upgrade-required` (ausser\n`DELETE /v1/me` und `GET /v1/health`).\n"
+  version: 1.1.0
 servers:
   -
     url: /
@@ -20,6 +20,111 @@ paths:
           description: Geloescht
         '401':
           description: 'Bearer-Token fehlt oder ist keine UUID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/encryption:
+    get:
+      tags:
+        - Encryption
+      summary: 'Verschluesselungszustand des Kontos'
+      description: 'Ein Geraet entscheidet damit zwischen „umstellen", „Umstellung fortsetzen" und „Konto-Code anfordern". Mit `keyCheck` prueft es vor dem ersten Sync, ob sein Kontoschluessel passt.'
+      operationId: get_v1_me_encryption
+      parameters:
+        -
+          $ref: '#/components/parameters/ProtocolHeader'
+      responses:
+        '200':
+          description: Zustand
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptionStatus'
+        '426':
+          description: 'Header X-Spiski-Protocol fehlt (alte App)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/encryption/begin:
+    post:
+      tags:
+        - Encryption
+      summary: 'Umstellung auf Verschluesselung beginnen'
+      description: "Setzt das Konto auf `migrating`. Vorher werden **alle** Teilen-Beziehungen\ngeloest: Mitglieder eigener Listen verlieren den Zugriff (`revokedLists`),\nTeilen-Codes werden ungueltig, aus fremden Listen tritt das Konto aus.\nDanach darf nur noch dieses Geraet synchronisieren; alte Apps bekommen `426`.\nFuer dasselbe Geraet idempotent."
+      operationId: post_v1_me_encryption_begin
+      parameters:
+        -
+          $ref: '#/components/parameters/ProtocolHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptionBegin'
+      responses:
+        '200':
+          description: 'Umstellung laeuft'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptionStatus'
+        '400':
+          description: 'clientId oder keyCheck fehlt oder ist ungueltig'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`migration-in-progress` (anderes Geraet) oder `already-encrypted`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '426':
+          description: 'Header X-Spiski-Protocol fehlt (alte App)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/encryption/commit:
+    post:
+      tags:
+        - Encryption
+      summary: 'Umstellung auf Verschluesselung abschliessen'
+      description: "Setzt das Konto auf `encrypted`, wenn keine Klartext-Zeile mehr auf dem\nServer liegt (sonst `409 encryption-incomplete`). Ein Konto ohne Zeilen\ndarf ohne `begin` direkt hierher und liefert dann `keyCheck` mit."
+      operationId: post_v1_me_encryption_commit
+      parameters:
+        -
+          $ref: '#/components/parameters/ProtocolHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncryptionCommit'
+      responses:
+        '200':
+          description: 'Konto ist verschluesselt'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncryptionStatus'
+        '400':
+          description: 'clientId fehlt oder keyCheck fehlt bzw. ist ungueltig'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`encryption-incomplete` (Klartext-Zeilen vorhanden) oder `migration-in-progress`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '426':
+          description: 'Header X-Spiski-Protocol fehlt (alte App)'
           content:
             application/json:
               schema:
@@ -196,7 +301,7 @@ paths:
       tags:
         - Sharing
       summary: 'Einer geteilten Liste beitreten'
-      description: 'Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.'
+      description: "Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.\n\nVerschluesselte Listen: Besitzer und Mitglied muessen beide verschluesselt sein, und der Body traegt `wrappedKey` – den Listenschluessel aus dem Link-Fragment, mit dem eigenen Kontoschluessel verpackt. Ein erneuter Beitritt mit `wrappedKey` ersetzt den gespeicherten."
       operationId: post_v1_share_join
       parameters:
         -
@@ -205,6 +310,12 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRequest'
       responses:
         '200':
           description: Beigetreten
@@ -212,6 +323,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JoinResult'
+        '400':
+          description: '`wrappedKey` fehlt (verschluesselte Liste) oder ist ungueltig'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '404':
           description: 'Code unbekannt oder nicht mehr gueltig'
           content:
@@ -219,7 +336,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: 'Zu viele Mitglieder bzw. geteilte Listen'
+          description: 'Zu viele Mitglieder bzw. geteilte Listen, oder `encryption-required` (Besitzer und Mitglied nicht im selben Verschluesselungszustand)'
           content:
             application/json:
               schema:
@@ -237,6 +354,9 @@ paths:
       summary: 'Lokale Aenderungen hochladen und fremde abholen'
       description: "Push und Pull in einem Request, serverseitig in einer Transaktion.\n\nAblauf: eingehende Zeilen werden per Last-Write-Wins ueber\n`(updatedAt, clientId)` gegen den Serverstand gehalten, akzeptierte\nZeilen bekommen eine neue `serverVersion`. Danach liefert die Antwort\nalle Zeilen mit `serverVersion > since` – plus den Serverstand jeder\ngepushten Zeile, auch der abgelehnten."
       operationId: post_v1_sync
+      parameters:
+        -
+          $ref: '#/components/parameters/ProtocolHeader'
       requestBody:
         required: true
         content:
@@ -262,6 +382,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+        '409':
+          description: '`migration-in-progress` (ein anderes Geraet stellt das Konto um) oder `encryption-required` (Frist abgelaufen, Konto noch unverschluesselt)'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '413':
           description: 'Body groesser als 1 MiB oder mehr als 500 Push-Zeilen'
           content:
@@ -270,6 +396,12 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '422':
           description: '"since" oder "limit" ausserhalb des zulaessigen Bereichs'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '426':
+          description: 'Alte App (ohne X-Spiski-Protocol: 2) und Konto verschluesselt bzw. Frist abgelaufen'
           content:
             application/json:
               schema:
@@ -305,10 +437,9 @@ components:
           example: 'Sync-Limit erreicht.'
       type: object
     ListChange:
-      description: 'Eine vom Client gepushte Listen-Zeile.'
+      description: "Eine vom Client gepushte Listen-Zeile. Klartext mit `name`, oder verschluesselt mit `enc` und `wrappedKey` (dann ohne `name`). Welche Form gilt, bestimmt der Zustand des Kontos; die andere ist `invalid`.\n"
       required:
         - id
-        - name
         - color
         - sortOrder
         - createdAt
@@ -321,6 +452,16 @@ components:
           type: string
           maxLength: 100
           minLength: 1
+        enc:
+          description: 'Verschluesselter Name (AES-256-GCM, base64url ohne Padding).'
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 6144
+        wrappedKey:
+          description: "Listenschluessel, mit dem Kontoschluessel verpackt. Im Pull der Schluessel des abfragenden Kontos (Besitzer oder Mitglied).\n"
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 256
         color:
           description: 'ARGB aus Flutters Color.toARGB32(), vorzeichenlos 32 Bit.'
           type: integer
@@ -344,11 +485,10 @@ components:
           nullable: true
       type: object
     ItemChange:
-      description: 'Eine vom Client gepushte Artikel-Zeile.'
+      description: "Eine vom Client gepushte Artikel-Zeile. Klartext mit `name`, `quantity`, `unit` und `note`, oder verschluesselt mit `enc` (dann ohne diese vier).\n"
       required:
         - id
         - listId
-        - name
         - sortOrder
         - createdAt
         - updatedAt
@@ -364,6 +504,11 @@ components:
           type: string
           maxLength: 200
           minLength: 1
+        enc:
+          description: 'Verschluesselt Name, Menge, Einheit und Notiz.'
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 6144
         quantity:
           type: number
           format: double
@@ -592,6 +737,58 @@ components:
           format: uri
           example: 'https://spiski.r3wald.net/join/K3M9QZ7T2B8XWPRC4N6DHJFA'
       type: object
+    JoinRequest:
+      description: 'Nur fuer verschluesselte Listen noetig; sonst darf der Body fehlen.'
+      properties:
+        wrappedKey:
+          description: "Listenschluessel aus dem Link-Fragment (`#k=…`), mit dem eigenen Kontoschluessel verpackt.\n"
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 256
+      type: object
+    EncryptionStatus:
+      required:
+        - state
+        - keyCheck
+      properties:
+        state:
+          type: string
+          enum:
+            - plaintext
+            - migrating
+            - encrypted
+        keyCheck:
+          description: "Fester Text, mit dem Kontoschluessel verschluesselt. Ein Geraet prueft damit seinen Konto-Code; der Server kann ihn nicht pruefen.\n"
+          type: string
+          nullable: true
+      type: object
+    EncryptionBegin:
+      required:
+        - clientId
+        - keyCheck
+      properties:
+        clientId:
+          description: 'Das Geraet, das die Umstellung fuehrt. Nur es darf bis zum `commit` synchronisieren.'
+          type: string
+          format: uuid
+        keyCheck:
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 256
+      type: object
+    EncryptionCommit:
+      required:
+        - clientId
+      properties:
+        clientId:
+          type: string
+          format: uuid
+        keyCheck:
+          description: 'Pflicht nur ohne vorheriges `begin` (Konto ohne Zeilen).'
+          type: string
+          pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+          maxLength: 256
+      type: object
     JoinResult:
       required:
         - listId
@@ -616,6 +813,18 @@ components:
             - up
             - down
       type: object
+  parameters:
+    ProtocolHeader:
+      name: X-Spiski-Protocol
+      in: header
+      description: "Protokollversion des Clients. `2` = kann verschluesselte Zeilen lesen und schreiben; fehlt der Header, gilt `1`. Gehoert auf jeden Request.\n"
+      required: false
+      schema:
+        type: integer
+        default: 1
+        enum:
+          - 1
+          - 2
   securitySchemes:
     AccountUuid:
       type: http
@@ -638,6 +847,9 @@ tags:
   -
     name: Live
     description: 'Live-Updates ueber den Mercure-Hub.'
+  -
+    name: Encryption
+    description: 'Umstellung eines Kontos auf Ende-zu-Ende-Verschluesselung.'
   -
     name: System
 

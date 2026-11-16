@@ -4,7 +4,7 @@ parameters:
     # Version der API (des Vertrags mit der App). Einzige Quelle: steht in openapi.yaml
     # (info.version, siehe nelmio_api_doc.yaml) und auf /status.json bzw. /status.html.
     # Bei Aenderungen am Vertrag anheben, danach `make openapi`.
-    spiski.api_version: '1.0.0'
+    spiski.api_version: '1.1.0'
 
 services:
     _defaults:
@@ -25,6 +25,11 @@ services:
     App\Sync\ClockSkewGuard:
         arguments:
             $toleranceSeconds: '%env(int:SPISKI_CLOCK_SKEW_TOLERANCE)%'
+
+    # Frist fuer die Umstellung auf Verschluesselung (CLAUDE.md 14); leer = keine.
+    App\Encryption\EncryptionPolicy:
+        arguments:
+            $deadline: '%env(default::SPISKI_ENCRYPTION_DEADLINE)%'
 
     # Leer oder kuerzer als 32 Zeichen = Admin-Zugang abgeschaltet.
     App\Security\AdminTokenAuthenticator:

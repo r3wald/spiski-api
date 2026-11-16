@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Encryption\ClientProtocol;
 use App\Entity\User;
 use App\Exception\ApiProblemException;
 use App\Sync\SyncRequestParser;
@@ -42,12 +43,15 @@ final class SyncController
             TEXT,
         tags: ['Sync'],
     )]
+    #[OA\Parameter(ref: '#/components/parameters/ProtocolHeader')]
     #[OA\RequestBody(required: true, content: new OA\JsonContent(ref: '#/components/schemas/SyncRequest'))]
     #[OA\Response(response: 200, description: 'Merge-Ergebnis und Pull-Fenster', content: new OA\JsonContent(ref: '#/components/schemas/SyncResponse'))]
     #[OA\Response(response: 400, description: 'JSON kaputt oder Pflichtfeld fehlt', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 401, description: 'Bearer-Token fehlt oder ist keine UUID', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(response: 409, description: '`migration-in-progress` (ein anderes Geraet stellt das Konto um) oder `encryption-required` (Frist abgelaufen, Konto noch unverschluesselt)', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 413, description: 'Body groesser als 1 MiB oder mehr als 500 Push-Zeilen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 422, description: '"since" oder "limit" ausserhalb des zulaessigen Bereichs', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(response: 426, description: 'Alte App (ohne X-Spiski-Protocol: 2) und Konto verschluesselt bzw. Frist abgelaufen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 429, description: 'Rate Limit erreicht, siehe Retry-After', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     public function __invoke(Request $request, #[CurrentUser] User $user): JsonResponse
     {
@@ -55,7 +59,7 @@ final class SyncController
 
         $now = $this->clock->now();
         $parsed = $this->parser->parse($request->getContent(), $now);
-        $result = $this->sync->sync($user, $parsed, $now);
+        $result = $this->sync->sync($user, $parsed, $now, ClientProtocol::fromRequest($request));
 
         return new JsonResponse($this->serializer->serialize($result));
     }

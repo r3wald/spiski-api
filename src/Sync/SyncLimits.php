@@ -32,6 +32,17 @@ final class SyncLimits
     public const MAX_UNIT_LENGTH = 20;
     public const MAX_NOTE_LENGTH = 500;
 
+    /**
+     * Ende-zu-Ende-Verschluesselung (CLAUDE.md 14): Format `v1.<nonce>.<chiffretext>`,
+     * base64url ohne Padding, Nonce 12 Byte (16 Zeichen). Der groesste erlaubte
+     * Artikel bleibt verschluesselt unter MAX_ENC_LENGTH.
+     */
+    public const ENC_PATTERN = '/^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$/';
+    public const MAX_ENC_LENGTH = 6144;
+
+    /** `wrappedKey` und `keyCheck`: kurze Chiffretexte im selben Format. */
+    public const MAX_WRAPPED_KEY_LENGTH = 256;
+
     public const INT32_MIN = -2147483648;
     public const INT32_MAX = 2147483647;
 

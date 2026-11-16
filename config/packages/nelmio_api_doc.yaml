@@ -12,6 +12,14 @@ nelmio_api_doc:
                 Alle Zeitstempel sind ISO-8601 in UTC mit Millisekunden
                 (`2026-08-21T14:03:11.482Z`). Konflikte werden per Last-Write-Wins
                 ueber `(updatedAt, clientId)` aufgeloest.
+
+                Ende-zu-Ende-Verschluesselung: Clients, die sie beherrschen, senden
+                auf jedem Request `X-Spiski-Protocol: 2`. Verschluesselte Zeilen
+                tragen `enc` (Chiffretext `v1.<nonce>.<chiffretext>`) statt der
+                Klartext-Felder; der Server sieht nie einen Schluessel. Konten in
+                `migrating`/`encrypted` – und nach Ablauf der Frist alle Konten –
+                bekommen ohne den Header `426 upgrade-required` (ausser
+                `DELETE /v1/me` und `GET /v1/health`).
             version: '%spiski.api_version%'
         servers:
             - url: /
@@ -25,8 +33,19 @@ nelmio_api_doc:
               description: Einzelne Listen mit anderen Konten teilen.
             - name: Live
               description: Live-Updates ueber den Mercure-Hub.
+            - name: Encryption
+              description: Umstellung eines Kontos auf Ende-zu-Ende-Verschluesselung.
             - name: System
         components:
+            parameters:
+                ProtocolHeader:
+                    name: X-Spiski-Protocol
+                    in: header
+                    required: false
+                    description: >
+                        Protokollversion des Clients. `2` = kann verschluesselte Zeilen lesen
+                        und schreiben; fehlt der Header, gilt `1`. Gehoert auf jeden Request.
+                    schema: { type: integer, enum: [1, 2], default: 1 }
             securitySchemes:
                 AccountUuid:
                     type: http
@@ -46,10 +65,25 @@ nelmio_api_doc:
 
                 ListChange:
                     type: object
-                    description: Eine vom Client gepushte Listen-Zeile.
+                    description: >
+                        Eine vom Client gepushte Listen-Zeile. Klartext mit `name`, oder
+                        verschluesselt mit `enc` und `wrappedKey` (dann ohne `name`).
+                        Welche Form gilt, bestimmt der Zustand des Kontos; die andere ist `invalid`.
                     properties:
                         id: { type: string, format: uuid }
                         name: { type: string, minLength: 1, maxLength: 100 }
+                        enc:
+                            type: string
+                            maxLength: 6144
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                            description: Verschluesselter Name (AES-256-GCM, base64url ohne Padding).
+                        wrappedKey:
+                            type: string
+                            maxLength: 256
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                            description: >
+                                Listenschluessel, mit dem Kontoschluessel verpackt. Im Pull der
+                                Schluessel des abfragenden Kontos (Besitzer oder Mitglied).
                         color:
                             type: integer
                             format: int64
@@ -68,11 +102,13 @@ nelmio_api_doc:
                             type: [string, 'null']
                             format: date-time
                             description: Gesetzt = Tombstone. Es gibt keinen separaten Delete-Endpoint.
-                    required: [id, name, color, sortOrder, createdAt, updatedAt]
+                    required: [id, color, sortOrder, createdAt, updatedAt]
 
                 ItemChange:
                     type: object
-                    description: Eine vom Client gepushte Artikel-Zeile.
+                    description: >
+                        Eine vom Client gepushte Artikel-Zeile. Klartext mit `name`, `quantity`,
+                        `unit` und `note`, oder verschluesselt mit `enc` (dann ohne diese vier).
                     properties:
                         id: { type: string, format: uuid }
                         listId:
@@ -80,6 +116,11 @@ nelmio_api_doc:
                             format: uuid
                             description: Muss zu einer Liste desselben Nutzers gehoeren, sonst `unknown_list`.
                         name: { type: string, minLength: 1, maxLength: 200 }
+                        enc:
+                            type: string
+                            maxLength: 6144
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                            description: Verschluesselt Name, Menge, Einheit und Notiz.
                         quantity: { type: [number, 'null'], format: double, minimum: 0 }
                         unit: { type: [string, 'null'], maxLength: 20 }
                         isChecked: { type: boolean, default: false }
@@ -89,7 +130,7 @@ nelmio_api_doc:
                         updatedAt: { type: string, format: date-time }
                         deletedAt: { type: [string, 'null'], format: date-time }
                         movedAt: { type: [string, 'null'], format: date-time }
-                    required: [id, listId, name, sortOrder, createdAt, updatedAt]
+                    required: [id, listId, sortOrder, createdAt, updatedAt]
 
                 ListState:
                     description: Der autoritative Serverstand einer Liste.
@@ -262,6 +303,56 @@ nelmio_api_doc:
                             format: uri
                             example: 'https://spiski.r3wald.net/join/K3M9QZ7T2B8XWPRC4N6DHJFA'
                     required: [code, url]
+
+                JoinRequest:
+                    type: object
+                    description: Nur fuer verschluesselte Listen noetig; sonst darf der Body fehlen.
+                    properties:
+                        wrappedKey:
+                            type: string
+                            maxLength: 256
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                            description: >
+                                Listenschluessel aus dem Link-Fragment (`#k=…`), mit dem eigenen
+                                Kontoschluessel verpackt.
+
+                EncryptionStatus:
+                    type: object
+                    properties:
+                        state:
+                            type: string
+                            enum: [plaintext, migrating, encrypted]
+                        keyCheck:
+                            type: string
+                            nullable: true
+                            description: >
+                                Fester Text, mit dem Kontoschluessel verschluesselt. Ein Geraet
+                                prueft damit seinen Konto-Code; der Server kann ihn nicht pruefen.
+                    required: [state, keyCheck]
+
+                EncryptionBegin:
+                    type: object
+                    properties:
+                        clientId:
+                            type: string
+                            format: uuid
+                            description: Das Geraet, das die Umstellung fuehrt. Nur es darf bis zum `commit` synchronisieren.
+                        keyCheck:
+                            type: string
+                            maxLength: 256
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                    required: [clientId, keyCheck]
+
+                EncryptionCommit:
+                    type: object
+                    properties:
+                        clientId: { type: string, format: uuid }
+                        keyCheck:
+                            type: string
+                            maxLength: 256
+                            pattern: '^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$'
+                            description: Pflicht nur ohne vorheriges `begin` (Konto ohne Zeilen).
+                    required: [clientId]
 
                 JoinResult:
                     type: object

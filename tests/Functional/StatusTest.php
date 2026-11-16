@@ -75,6 +75,7 @@ final class StatusTest extends ApiTestCase
             'lists' => ['active' => 1, 'deleted' => 1, 'shared' => 1],
             'items' => ['active' => 2, 'archived' => 1],
             'memberships' => 1,
+            'encryption' => ['plaintext' => 3, 'migrating' => 0, 'encrypted' => 0],
         ], $this->statusJson()['statistics']);
     }
 
@@ -85,6 +86,7 @@ final class StatusTest extends ApiTestCase
             'lists' => ['active' => 0, 'deleted' => 0, 'shared' => 0],
             'items' => ['active' => 0, 'archived' => 0],
             'memberships' => 0,
+            'encryption' => ['plaintext' => 0, 'migrating' => 0, 'encrypted' => 0],
         ], $this->statusJson()['statistics']);
     }
 

@@ -44,10 +44,11 @@ final class SyncResponseSerializer
     private function serializeList(ShoppingList $list, SyncResult $result): array
     {
         $id = $list->getId()->toRfc4122();
+        $isOwner = $list->getUser()->getId()->toRfc4122() === $result->viewerId;
 
         return [
             'id' => $id,
-            'name' => $list->getName(),
+            ...$this->listContent($list, $isOwner ? $list->getWrappedKey() : ($result->memberWrappedKeys[$id] ?? null)),
             'color' => $list->getColor(),
             'sortOrder' => $list->getSortOrder(),
             'createdAt' => $this->timestamp($list->getCreatedAt()),
@@ -56,7 +57,7 @@ final class SyncResponseSerializer
             'serverVersion' => $result->versions['list:'.$id] ?? $list->getServerVersion(),
             // Nur in Antworten: wem die Liste gehoert und mit wie vielen
             // Konten sie geteilt ist (CLAUDE.md 12).
-            'role' => $list->getUser()->getId()->toRfc4122() === $result->viewerId ? 'owner' : 'member',
+            'role' => $isOwner ? 'owner' : 'member',
             'memberCount' => $result->memberCounts[$id] ?? 0,
             // Beitritt des abfragenden Kontos; null bei eigenen Listen.
             'joinedAt' => $this->timestamp($result->joinedAt[$id] ?? null),
@@ -71,11 +72,8 @@ final class SyncResponseSerializer
         return [
             'id' => $item->getId()->toRfc4122(),
             'listId' => $item->getList()->getId()->toRfc4122(),
-            'name' => $item->getName(),
-            'quantity' => $item->getQuantity(),
-            'unit' => $item->getUnit(),
+            ...$this->itemContent($item),
             'isChecked' => $item->isChecked(),
-            'note' => $item->getNote(),
             'sortOrder' => $item->getSortOrder(),
             'createdAt' => $this->timestamp($item->getCreatedAt()),
             'updatedAt' => $this->timestamp($item->getUpdatedAt()),
@@ -87,6 +85,40 @@ final class SyncResponseSerializer
             // Geraete zaehlen nicht. Die App benachrichtigt daraufhin.
             'changedByOther' => $this->changedByOther($item, $result),
         ];
+    }
+
+    /**
+     * Klartext oder Chiffretext (CLAUDE.md 14). Verschluesselte Zeilen tragen
+     * `enc` statt `name`, dazu den Listenschluessel, verpackt mit dem
+     * Kontoschluessel **des abfragenden** Kontos: der des Besitzers liegt an der
+     * Liste, der eines Mitglieds an seiner Mitgliedschaft.
+     *
+     * @return array<string, mixed>
+     */
+    private function listContent(ShoppingList $list, ?string $wrappedKey): array
+    {
+        if (!$list->isEncrypted()) {
+            return ['name' => $list->getName()];
+        }
+
+        return ['enc' => $list->getEnc(), 'wrappedKey' => $wrappedKey];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function itemContent(ShoppingItem $item): array
+    {
+        if (!$item->isEncrypted()) {
+            return [
+                'name' => $item->getName(),
+                'quantity' => $item->getQuantity(),
+                'unit' => $item->getUnit(),
+                'note' => $item->getNote(),
+            ];
+        }
+
+        return ['enc' => $item->getEnc()];
     }
 
     /**

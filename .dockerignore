@@ -19,8 +19,12 @@ compose.yaml
 .env.local
 .env.*.local
 
-# Produktions-Secrets kommen zur Laufzeit per env_file, nie ins Image.
+# Server-Secrets kommen zur Laufzeit per env_file, nie ins Image.
 .env.prod
+.env.staging
+
+# Deploy-Skripte laufen lokal, nicht im Container.
+update-*.sh
 
 # Compose-Dateien und Webserver-Konfiguration gehoeren nicht ins Image
 # (das Caddyfile wird eingehaengt).

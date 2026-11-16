@@ -14,12 +14,22 @@ final class ListChange
 {
     public function __construct(
         public readonly Uuid $id,
-        public readonly string $name,
+        /** `null` bei verschluesselten Zeilen; dann steht der Name in $enc. */
+        public readonly ?string $name,
         public readonly int $color,
         public readonly int $sortOrder,
         public readonly \DateTimeImmutable $createdAt,
         public readonly \DateTimeImmutable $updatedAt,
         public readonly ?\DateTimeImmutable $deletedAt,
+        /** Verschluesselter Name (CLAUDE.md 14). */
+        public readonly ?string $enc = null,
+        /** Listenschluessel, verpackt; bei verschluesselten Listen Pflicht. */
+        public readonly ?string $wrappedKey = null,
     ) {
+    }
+
+    public function isEncrypted(): bool
+    {
+        return null !== $this->enc;
     }
 }

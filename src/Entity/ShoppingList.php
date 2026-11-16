@@ -66,6 +66,17 @@ class ShoppingList
     #[ORM\Column(length: 32, unique: true, nullable: true)]
     private ?string $shareCode = null;
 
+    /**
+     * Verschluesselter Name (CLAUDE.md 14), `null` bei Klartext-Zeilen. Bei
+     * verschluesselten Zeilen traegt `name` nur einen leeren Platzhalter.
+     */
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $enc = null;
+
+    /** Listenschluessel des Besitzers, mit dessen Kontoschluessel verpackt. */
+    #[ORM\Column(length: 256, nullable: true)]
+    private ?string $wrappedKey = null;
+
     public function __construct(Uuid $id, User $user)
     {
         $this->id = $id;
@@ -82,7 +93,11 @@ class ShoppingList
      */
     public function apply(ListChange $change, int $serverVersion, Uuid $clientId): void
     {
-        $this->name = $change->name;
+        // Verschluesselt: Klartext-Spalte leeren, damit beim Umstellen kein
+        // alter Name zurueckbleibt (CLAUDE.md 14).
+        $this->name = $change->name ?? '';
+        $this->enc = $change->enc;
+        $this->wrappedKey = $change->wrappedKey;
         $this->color = $change->color;
         $this->sortOrder = $change->sortOrder;
         $this->createdAt = $change->createdAt;
@@ -140,6 +155,21 @@ class ShoppingList
     public function getLastClientId(): Uuid
     {
         return $this->lastClientId;
+    }
+
+    public function getEnc(): ?string
+    {
+        return $this->enc;
+    }
+
+    public function getWrappedKey(): ?string
+    {
+        return $this->wrappedKey;
+    }
+
+    public function isEncrypted(): bool
+    {
+        return null !== $this->enc;
     }
 
     public function getShareCode(): ?string

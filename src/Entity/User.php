@@ -35,6 +35,29 @@ class User implements UserInterface
     #[ORM\Column(type: DateTimeMsType::NAME)]
     private \DateTimeImmutable $lastSeenAt;
 
+    /**
+     * Stand der Ende-zu-Ende-Verschluesselung (CLAUDE.md 14). Geaendert wird er
+     * nur ueber App\Encryption\EncryptionService, unter Sperre und per SQL; der
+     * Wert hier ist der beim Laden des Kontos.
+     */
+    #[ORM\Column(length: 16, enumType: EncryptionState::class, options: ['default' => 'plaintext'])]
+    private EncryptionState $encryptionState = EncryptionState::Plaintext;
+
+    #[ORM\Column(type: DateTimeMsType::NAME, nullable: true)]
+    private ?\DateTimeImmutable $encryptionChangedAt = null;
+
+    /** Das Geraet (clientId), das die Migration fuehrt; nur in `migrating`. */
+    #[ORM\Column(type: UuidType::NAME, nullable: true)]
+    private ?Uuid $migrationClientId = null;
+
+    /**
+     * Pruefwert des Kontoschluessels: ein fester Text, vom Client verschluesselt.
+     * Der Server kann ihn nicht pruefen, nur ausliefern; Geraete erkennen daran
+     * einen falschen Konto-Code vor dem ersten Sync.
+     */
+    #[ORM\Column(length: 256, nullable: true)]
+    private ?string $keyCheck = null;
+
     public function __construct(Uuid $id, \DateTimeImmutable $now)
     {
         $this->id = $id;
@@ -70,6 +93,26 @@ class User implements UserInterface
     public function setLastSeenAt(\DateTimeImmutable $lastSeenAt): void
     {
         $this->lastSeenAt = $lastSeenAt;
+    }
+
+    public function getEncryptionState(): EncryptionState
+    {
+        return $this->encryptionState;
+    }
+
+    public function getEncryptionChangedAt(): ?\DateTimeImmutable
+    {
+        return $this->encryptionChangedAt;
+    }
+
+    public function getMigrationClientId(): ?Uuid
+    {
+        return $this->migrationClientId;
+    }
+
+    public function getKeyCheck(): ?string
+    {
+        return $this->keyCheck;
     }
 
     /**

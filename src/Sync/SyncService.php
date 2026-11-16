@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Sync;
 
+use App\Encryption\ClientProtocol;
+use App\Encryption\EncryptionPolicy;
+use App\Entity\EncryptionState;
 use App\Entity\ShoppingItem;
 use App\Entity\ShoppingList;
 use App\Entity\SyncView;
@@ -21,13 +24,14 @@ use App\Sync\Dto\RejectReason;
 use App\Sync\Dto\SyncRequest;
 use App\Sync\Dto\SyncResult;
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Uid\Uuid;
 
 /**
  * Push und Pull in einer einzigen Transaktion (CLAUDE.md 5.2), mit geteilten
- * Listen (CLAUDE.md 12).
+ * Listen (CLAUDE.md 12) und Ende-zu-Ende-Verschluesselung (CLAUDE.md 14).
  */
 final class SyncService
 {
@@ -39,19 +43,23 @@ final class SyncService
         private readonly ListAccess $access,
         private readonly SyncLock $lock,
         private readonly LiveUpdates $live,
+        private readonly EncryptionPolicy $encryption,
     ) {
     }
 
-    public function sync(User $user, SyncRequest $request, \DateTimeImmutable $now): SyncResult
+    /**
+     * @param int $protocol was der Client kann (ClientProtocol, Header `X-Spiski-Protocol`)
+     */
+    public function sync(User $user, SyncRequest $request, \DateTimeImmutable $now, int $protocol = ClientProtocol::LEGACY): SyncResult
     {
         /** @var mixed $result */
-        $result = $this->live->around(fn (): mixed => $this->em->wrapInTransaction(fn (): SyncResult => $this->run($user, $request, $now)));
+        $result = $this->live->around(fn (): mixed => $this->em->wrapInTransaction(fn (): SyncResult => $this->run($user, $request, $now, $protocol)));
         \assert($result instanceof SyncResult);
 
         return $result;
     }
 
-    private function run(User $user, SyncRequest $request, \DateTimeImmutable $now): SyncResult
+    private function run(User $user, SyncRequest $request, \DateTimeImmutable $now, int $protocol): SyncResult
     {
         $connection = $this->em->getConnection();
         $userId = $user->getId()->toRfc4122();
@@ -82,6 +90,10 @@ final class SyncService
         }
         $publisher = VersionPublisher::lock($connection, $exclusive ? $userIds : [$userId]);
 
+        // Erst jetzt ist die Kontozeile gesperrt und der Zustand stabil: Ein
+        // gleichzeitiges `begin` kann nicht mehr dazwischenkommen.
+        $state = $this->guardEncryption($connection, $userId, $protocol, $request->clientId);
+
         $counter = $publisher->counter($userId);
 
         // Cursor aus einer geloeschten oder wiederhergestellten Datenbank: der
@@ -92,8 +104,8 @@ final class SyncService
         $listResults = $request->invalidLists;
         $itemResults = $request->invalidItems;
 
-        $pushedLists = $this->pushLists($user, $request, $publisher, $audiences, $listResults);
-        $this->pushItems($user, $request, $publisher, $audiences, $pushedLists, $itemResults);
+        $pushedLists = $this->pushLists($user, $state, $request, $publisher, $audiences, $listResults);
+        $this->pushItems($user, $state, $request, $publisher, $audiences, $pushedLists, $itemResults);
 
         $this->live->queue($publisher->flush($connection), $userId, $request->clientId->toRfc4122());
         $user->setLastSeenAt($now);
@@ -103,6 +115,67 @@ final class SyncService
         $this->em->flush();
 
         return $this->pull($userId, $request, $since, $publisher->counter($userId), $fullResync, $listResults, $itemResults);
+    }
+
+    /**
+     * Darf dieser Client mit diesem Konto synchronisieren (CLAUDE.md 14)?
+     *
+     * Laeuft unter der Sperre der Kontozeile. Die Pruefung im
+     * ProtocolGuardListener am Eingang ist nur der schnelle Weg; diese hier ist
+     * die verbindliche, weil ein `begin` zwischen beiden liegen kann.
+     */
+    private function guardEncryption(Connection $connection, string $userId, int $protocol, Uuid $clientId): EncryptionState
+    {
+        /** @var array{encryption_state: string, migration_client_id: string|null}|false $row */
+        $row = $connection->fetchAssociative(
+            'SELECT encryption_state, migration_client_id FROM app_user WHERE id = :id',
+            ['id' => $userId],
+        );
+        if (false === $row) {
+            throw new \LogicException('Gesperrtes Konto nicht gefunden.');
+        }
+        $state = EncryptionState::from($row['encryption_state']);
+
+        if ($protocol < ClientProtocol::ENCRYPTION) {
+            // Eine alte App wuerde verschluesselte Zeilen als leere Namen
+            // uebernehmen und ihre lokalen Daten damit ueberschreiben.
+            if (EncryptionState::Plaintext !== $state || $this->encryption->deadlinePassed()) {
+                throw ApiProblemException::upgradeRequired('Diese App-Version ist veraltet. Bitte aktualisieren.');
+            }
+
+            return $state;
+        }
+
+        if (EncryptionState::Plaintext === $state && $this->encryption->deadlinePassed()) {
+            throw ApiProblemException::encryptionRequired('Die Frist ist abgelaufen: Das Konto muss zuerst auf Verschluesselung umgestellt werden.');
+        }
+        if (EncryptionState::Migrating === $state && $row['migration_client_id'] !== $clientId->toRfc4122()) {
+            throw ApiProblemException::migrationInProgress('Ein anderes Geraet stellt dieses Konto gerade auf Verschluesselung um.');
+        }
+
+        return $state;
+    }
+
+    /**
+     * Last-Write-Wins, mit einer Ausnahme beim Umstellen (CLAUDE.md 14): In
+     * `migrating` ersetzt eine verschluesselte Zeile eine Klartext-Zeile
+     * unbedingt. Sie hat dasselbe `updatedAt` wie ihr Klartext und waere sonst
+     * ein No-Op.
+     */
+    private function decide(
+        EncryptionState $state,
+        ShoppingList|ShoppingItem|null $existing,
+        \DateTimeImmutable $updatedAt,
+        Uuid $clientId,
+    ): MergeDecision {
+        if (null === $existing) {
+            return MergeDecision::Insert;
+        }
+        if (EncryptionState::Migrating === $state && !$existing->isEncrypted()) {
+            return MergeDecision::Accept;
+        }
+
+        return $this->conflictResolver->decide($existing->getUpdatedAt(), $existing->getLastClientId(), $updatedAt, $clientId);
     }
 
     /**
@@ -125,7 +198,7 @@ final class SyncService
      *
      * @return array<string, ShoppingList> die gepushten Listen, auch neu angelegte
      */
-    private function pushLists(User $user, SyncRequest $request, VersionPublisher $publisher, array &$audiences, array &$listResults): array
+    private function pushLists(User $user, EncryptionState $state, SyncRequest $request, VersionPublisher $publisher, array &$audiences, array &$listResults): array
     {
         $userId = $user->getId()->toRfc4122();
         $existingLists = $this->listRepository->findByIds(array_map(static fn (ListChange $c): Uuid => $c->id, $request->lists));
@@ -135,6 +208,13 @@ final class SyncService
             $key = $change->id->toRfc4122();
             $existing = $existingLists[$key] ?? null;
 
+            // Ein Konto schreibt entweder nur Klartext oder nur Chiffretext; ein
+            // Mischbestand liesse sich nie vollstaendig umstellen.
+            if ($change->isEncrypted() !== $state->expectsEncryptedRows()) {
+                $listResults[] = PushResult::rejected($change->id, RejectReason::Invalid);
+                continue;
+            }
+
             // Die Liste selbst (Name, Farbe, Reihenfolge, Loeschen) aendert
             // nur der Besitzer; Mitglieder bearbeiten nur die Artikel.
             if (null !== $existing && $existing->getUser()->getId()->toRfc4122() !== $userId) {
@@ -142,14 +222,7 @@ final class SyncService
                 continue;
             }
 
-            $decision = null === $existing
-                ? MergeDecision::Insert
-                : $this->conflictResolver->decide(
-                    $existing->getUpdatedAt(),
-                    $existing->getLastClientId(),
-                    $change->updatedAt,
-                    $request->clientId,
-                );
+            $decision = $this->decide($state, $existing, $change->updatedAt, $request->clientId);
 
             if (MergeDecision::Reject === $decision) {
                 $listResults[] = PushResult::rejected($change->id, RejectReason::Stale);
@@ -189,7 +262,7 @@ final class SyncService
      * @param array<string, ShoppingList> $pushedLists
      * @param list<PushResult>            $itemResults
      */
-    private function pushItems(User $user, SyncRequest $request, VersionPublisher $publisher, array $audiences, array $pushedLists, array &$itemResults): void
+    private function pushItems(User $user, EncryptionState $state, SyncRequest $request, VersionPublisher $publisher, array $audiences, array $pushedLists, array &$itemResults): void
     {
         $userId = $user->getId()->toRfc4122();
         $existingItems = $this->itemRepository->findByIds(array_map(static fn (ItemChange $c): Uuid => $c->id, $request->items));
@@ -209,6 +282,14 @@ final class SyncService
         $itemCounts = [];
 
         foreach ($request->items as $change) {
+            // Wie bei den Listen: nur das Format, das zum Zustand passt. Teilen
+            // gibt es nur zwischen Konten im selben Zustand (ShareService::join,
+            // EncryptionService::begin), der eigene Zustand genuegt deshalb.
+            if ($change->isEncrypted() !== $state->expectsEncryptedRows()) {
+                $itemResults[] = PushResult::rejected($change->id, RejectReason::Invalid);
+                continue;
+            }
+
             $listKey = $change->listId->toRfc4122();
             $list = $lists[$listKey] ?? null;
             $audience = $audiences[$listKey] ?? null;
@@ -241,14 +322,7 @@ final class SyncService
                 }
             }
 
-            $decision = null === $existing
-                ? MergeDecision::Insert
-                : $this->conflictResolver->decide(
-                    $existing->getUpdatedAt(),
-                    $existing->getLastClientId(),
-                    $change->updatedAt,
-                    $request->clientId,
-                );
+            $decision = $this->decide($state, $existing, $change->updatedAt, $request->clientId);
 
             if (MergeDecision::Reject === $decision) {
                 $itemResults[] = PushResult::rejected($change->id, RejectReason::Stale);
@@ -374,6 +448,7 @@ final class SyncService
             $revoked,
             $this->access->memberCounts($outListIds),
             $this->access->joinedAt($userId, $outListIds),
+            $this->access->memberWrappedKeys($userId, $outListIds),
         );
     }
 

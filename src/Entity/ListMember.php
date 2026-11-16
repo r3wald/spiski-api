@@ -32,6 +32,13 @@ class ListMember
     #[ORM\Column(type: DateTimeMsType::NAME)]
     private \DateTimeImmutable $joinedAt;
 
+    /**
+     * Listenschluessel, mit dem Kontoschluessel des Mitglieds verpackt
+     * (CLAUDE.md 14); `null` bei Klartext-Listen.
+     */
+    #[ORM\Column(length: 256, nullable: true)]
+    private ?string $wrappedKey = null;
+
     public function __construct(ShoppingList $list, User $user, \DateTimeImmutable $joinedAt)
     {
         $this->list = $list;
@@ -52,5 +59,10 @@ class ListMember
     public function getJoinedAt(): \DateTimeImmutable
     {
         return $this->joinedAt;
+    }
+
+    public function getWrappedKey(): ?string
+    {
+        return $this->wrappedKey;
     }
 }

@@ -229,7 +229,10 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `POST` | `/v1/lists/{id}/share/renew` | ja | Neuer Teilen-Code, alter ungültig (nur Besitzer) |
 | `DELETE` | `/v1/lists/{id}/share` | ja | Teilen beenden, alle Mitglieder verlieren den Zugriff |
 | `DELETE` | `/v1/lists/{id}/membership` | ja | Geteilte Liste verlassen |
-| `POST` | `/v1/shares/{code}` | ja | Einer geteilten Liste beitreten |
+| `POST` | `/v1/shares/{code}` | ja | Einer geteilten Liste beitreten (verschlüsselt: Body `{"wrappedKey"}`) |
+| `GET` | `/v1/me/encryption` | ja | Verschlüsselungszustand und `keyCheck`, siehe Abschnitt 14 |
+| `POST` | `/v1/me/encryption/begin` | ja | Umstellung beginnen (löst alle Teilen-Beziehungen) |
+| `POST` | `/v1/me/encryption/commit` | ja | Umstellung abschließen |
 | `GET` | `/v1/health` | nein | Health-Check (App-Status + DB-Erreichbarkeit) |
 | `GET` | `/status.json`, `/status.html` | nein | Statusseite: API-Version, Revision, DB, Schema, Summen über alle Konten. IP-Limit 60/Minute. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
@@ -249,8 +252,10 @@ Alle Fehler als RFC 9457 Problem Details (`application/problem+json`):
 |---|---|
 | `400` | JSON kaputt oder Pflichtfelder (`since`, `clientId`) fehlen |
 | `401` | Kein Bearer-Token oder kein gültiges UUID-Format |
+| `409` | Verschlüsselung: `migration-in-progress`, `already-encrypted`, `encryption-incomplete`, `encryption-required` (Abschnitt 14) |
 | `413` | Body > 1 MiB oder > 500 Push-Zeilen |
 | `422` | Request strukturell gültig, aber `since`/`limit` außerhalb des zulässigen Bereichs |
+| `426` | `upgrade-required`: alte App (ohne `X-Spiski-Protocol: 2`) bei verschlüsseltem Konto oder nach der Frist (Abschnitt 14) |
 | `429` | Rate Limit, mit `Retry-After`-Header |
 | `500` | Unerwarteter Fehler, ohne Details im Body |
 
@@ -275,8 +280,11 @@ api/
       AdminListReader.php      // Lese-Abfrage für die Admin-Seite (DBAL)
       AdminPageRenderer.php    // HTML der Admin-Seite, ohne JavaScript
       AdminPageLimits.php
+    Command/
+      PurgePlaintextCommand.php   // app:purge-plaintext, Frist-Job (Abschnitt 14)
     Controller/
       AdminController.php
+      EncryptionController.php    // /v1/me/encryption[/begin|/commit]
       SyncController.php
       AccountController.php
       HealthController.php
@@ -287,8 +295,10 @@ api/
       User.php
       ShoppingList.php
       ShoppingItem.php
+    Encryption/                // Zustand, Frist, Protokoll-Header, Formatpruefung (Abschnitt 14)
     EventListener/
       ApiExceptionListener.php // Ausnahmen -> Problem Details
+      ProtocolGuardListener.php // 426 fuer alte Apps (Abschnitt 14)
     Exception/
       ApiProblemException.php
     Http/
@@ -301,7 +311,7 @@ api/
     Status/
       StatusReader.php         // Zustand: Version, DB, Migrationen, Summen – nie UUIDs oder Nutzerinhalt
       StatusPageRenderer.php   // HTML der Statusseite, ohne JavaScript
-      BuildInfo.php            // liest build-info.json (Revision, Deployment-Zeit; schreibt update.sh)
+      BuildInfo.php            // liest build-info.json (Revision, Deployment-Zeit; schreiben update-*.sh)
     Sync/
       SyncService.php        // Transaktion, Zähler-Vergabe, Push/Pull-Orchestrierung
       ConflictResolver.php     // LWW inkl. clientId-Tiebreaker
@@ -319,7 +329,8 @@ api/
   .github/workflows/ci.yml
   openapi.yaml                 // generiert, versioniert, in CI gegen Drift geprüft
   compose.yaml               // php (FrankenPHP), postgres, postgres_test
-  compose.prod.yaml          // Produktion: nur 127.0.0.1, TLS beim Nginx davor, Secrets in .env.prod
+  compose.prod.yaml          // Server (prod + staging): nur 127.0.0.1, TLS beim Nginx davor, Secrets in .env.prod/.env.staging
+  update-prod.sh, update-staging.sh  // Deployment per rsync/ssh, je Server-Umgebung eins
   Dockerfile                   // Stages: base, dev, prod
   Makefile                     // make check = stan + test + openapi-check
 ```
@@ -348,6 +359,10 @@ Functional-Tests laufen gegen PostgreSQL, nicht gegen SQLite. Begründung: Die k
 - Pagination: `hasMore`-Kette liefert am Ende exakt den Gesamtbestand
 - Item mit fremder/unbekannter `listId` → `unknown_list`, kein Schreibzugriff
 - `updatedAt` weit in der Zukunft → geclampt
+
+### Umgebungen
+
+Vier Umgebungen: **Entwicklung** (lokal, `compose.yaml`, `APP_ENV=dev`), **Test** (lokal, `postgres_test`, `APP_ENV=test`), **Staging** (Server, `~/spiski-dev`, `https://spiski-dev.r3wald.net` → `127.0.0.1:8082`, Compose-Projekt `spiski-staging`, `.env.staging`) und **Produktion** (Server, `~/spiski`, `https://spiski.r3wald.net` → `127.0.0.1:8081`, Compose-Projekt `spiski-prod`, `.env.prod`). Staging und Produktion teilen `compose.prod.yaml` und laufen beide mit `APP_ENV=prod`, aber mit getrennten Datenbanken und Secrets. Die Dev-App (Debug-Build, `net.r3wald.spiski.dev`) und die Integrationstests der App sprechen Staging an, Release-Builds die Produktion. Details: README, „Umgebungen“ und „Server“.
 
 ### Hosting
 
@@ -459,4 +474,69 @@ Geöffnete Apps (Android und Web) erfahren Änderungen sofort statt erst beim n�
 - **Logs:** Das Caddyfile filtert den Query-Parameter `authorization` aus den Access-Logs.
 - **Tests:** `tests/Functional/LiveTest.php`; in der Testumgebung ersetzt `App\Tests\Support\RecordingHub` den Hub.
 - **Nginx:** eigener `location /.well-known/mercure` ohne Pufferung und mit langem Timeout (README, „Nginx“).
+
+## 14. Ende-zu-Ende-Verschlüsselung (Server umgesetzt)
+
+Der Server soll von den Listen nur Chiffretext halten. Verschlüsselt wird auf dem Gerät. **Stand:** Server (Phase 2) und App (Phasen 3–5: Sync, Umstellung, Teilen) sind umgesetzt; offen sind der nicht exportierbare Web-Schlüssel und der Betrieb. Das vollständige Konzept (Schlüssel, Datenformat, Konto-Code, Migration, Teilen, Web, Nutzerhinweise, Tests) steht in [`app/docs/07-verschluesselung.md`](../app/docs/07-verschluesselung.md); hier die Folgen für den Server.
+
+### Entscheidungen
+
+| Thema | Entscheidung |
+|---|---|
+| Umfang | Verschlüsselt: Name (Liste, Artikel), Menge, Einheit, Notiz. Lesbar: `isChecked`, `color`, `sortOrder`, `deletedAt`, `movedAt`, Zeitstempel, IDs, `listId`, Besitz und Mitglieder |
+| Schlüssel | Kontoschlüssel (256 Bit) und je Liste ein Listenschlüssel; der Server sieht nie einen Schlüssel, nur `wrappedKey` (Listenschlüssel, mit dem Kontoschlüssel verpackt) |
+| Verfahren | AES-256-GCM, Format `v1.<nonce>.<chiffretext>` (`enc`), AAD an `listId`/`id` gebunden, Padding auf 32 Byte |
+| Migration | Pro Konto, Zustand `plaintext` → `migrating` → `encrypted`; alte Apps (Protokoll 1, ohne Header `X-Spiski-Protocol`) bekommen ab `migrating` `426 upgrade-required` |
+| Geteilte Listen | `begin` löst **ohne Rücksicht** alle Teilen-Beziehungen des Kontos: eigene Listen (Mitglieder entfernt, `share_code` gelöscht, `revokedLists`) und Mitgliedschaften in fremden Listen (Austritt) |
+| Frist | Eine Woche (Produktion: bis 23.11.2026, 24:00 Uhr MEZ; Staging: sofort); danach `426` für alle Klartext-Clients und tägliches Löschen der Klartext-Daten nicht migrierter Konten |
+| Lokale Datenbank | Bleibt unverschlüsselt (Klartext in SQLite); verschlüsselt wird nur an der Grenze zum Server |
+
+### Datenmodell
+
+- `app_user`: `encryption_state` (`plaintext`, `migrating`, `encrypted`; Standard `plaintext`), `encryption_changed_at`, `migration_client_id` (das Gerät, das die Migration führt), `key_check` (Prüfwert des Kontoschlüssels, vom Client geliefert).
+- `shopping_list`: `enc` (Name), `wrapped_key` (Listenschlüssel des **Besitzers**), beide `NULL` für Klartext-Zeilen. `name` bleibt `NOT NULL` und trägt bei verschlüsselten Zeilen einen Platzhalter.
+- `shopping_item`: `enc`; `name` (Platzhalter), `quantity`, `unit`, `note` sind bei verschlüsselten Zeilen leer.
+- `list_member`: `wrapped_key` (Listenschlüssel des **Mitglieds**, mit dessen Kontoschlüssel verpackt).
+
+### Protokoll
+
+- **Protokoll per Header:** `X-Spiski-Protocol: 2` auf **jedem** Request (fehlt = Protokoll 1). Ein Body-Feld reicht nicht, weil Teilen, Live-Updates und Löschen keinen Body haben. Konten in `migrating`/`encrypted` werden nur mit Protokoll 2 bedient, sonst `426` (`upgrade-required`), für Push **und** Pull: Eine alte App würde sonst Platzhalter-Namen übernehmen und ihre lokalen Namen überschreiben. **Ausnahmen:** `DELETE /v1/me` (Recht auf Löschung) und `GET /v1/health`.
+- `GET /v1/me/encryption` → `{state, keyCheck}`. `keyCheck` ist ein fester Text, mit dem Kontoschlüssel verschlüsselt; der Server speichert ihn bei `begin` und kann ihn nicht prüfen, nur ausliefern. Geräte erkennen daran einen falschen Konto-Code vor dem ersten Sync.
+- Zeilen tragen `enc` statt `name`/`quantity`/`unit`/`note`; Listen zusätzlich `wrappedKey`. Der Server prüft nur `enc` (`^v1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+$`, höchstens **6144** Zeichen) und `wrappedKey` (höchstens **256**). Klartext-Felder von verschlüsselten Konten → `invalid`.
+- `POST /v1/me/encryption/begin` mit `{clientId, keyCheck}` (idempotent für dasselbe Gerät; `409 migration-in-progress` für ein anderes, `409 already-encrypted` danach): setzt `migrating` und löst in **derselben Transaktion**, **vor** der ersten Umstellung einer Zeile, alle Teilen-Beziehungen des Kontos: eigene Listen wie `ShareService::stop`, fremde wie `leave` (vgl. `detachAccount`). Ohne das Austreten säße ein verschlüsseltes Konto in Klartext-Listen fremder Konten.
+- In `migrating` ersetzt eine gepushte verschlüsselte Zeile eine **Klartext-Zeile unbedingt**, ohne Last-Write-Wins (gleicher `updatedAt` wäre sonst ein No-Op), und leert die Klartext-Spalten. Verschlüsselte Zeilen folgen wieder Last-Write-Wins. Der Pull liefert dem migrierenden Gerät noch nicht umgestellte Zeilen weiter im Klartext (Reste, die ein anderes Gerät kurz vor `begin` gepusht hat).
+- In `migrating` darf nur das Gerät synchronisieren, das `begin` aufgerufen hat (`migration_client_id`); andere Geräte mit Protokoll 2 bekommen beim Sync `409 migration-in-progress`.
+- `POST /v1/me/encryption/commit` mit `{clientId, keyCheck?}`: nur wenn **keine** Klartext-Zeile des Kontos mehr existiert, sonst `409 encryption-incomplete` mit der Zahl; setzt `encrypted`. Ein Konto ohne Zeilen (neu angelegt) darf direkt `commit` aufrufen (mit `keyCheck`).
+- Beitritt (`POST /v1/shares/{code}`) einer verschlüsselten Liste braucht `{"wrappedKey"}` und ein verschlüsseltes Konto von Besitzer **und** Mitglied, sonst `409 encryption-required`. Der Teilen-Code bleibt serverseitig; der Listenschlüssel steht nur im Link-Fragment. `public/join.js` muss `location.hash` an den Verweis zur Web-App anhängen; der nackte Code reicht zum Beitritt nicht mehr.
+- Kontingente, Last-Write-Wins, Echo, `fullResync`, Tombstones, Live-Updates bleiben unverändert. Der Push wird zusätzlich nach Bytes (ca. 900 KiB) geschnitten, weil 500 große `enc` mehr als 1 MiB ergeben können.
+
+### Frist-Job
+
+`SPISKI_ENCRYPTION_DEADLINE` (ISO-Datum; leer = keine Frist). Danach:
+
+1. `426` für **alle** Requests mit Protokoll 1 (Ausnahmen wie oben). Ein `plaintext`-Konto mit Protokoll 2 bekommt beim Sync `409 encryption-required` und darf nur noch `begin`/`commit`.
+2. Täglicher Befehl (z. B. `app:purge-plaintext`): für Konten mit `encryption_state = 'plaintext'` Listen, Artikel, Mitgliedschaften, Teilen-Codes **und `sync_view`-Zeilen** löschen; das Konto bleibt. **`version_counter` nicht zurücksetzen:** Sonst bekäme ein Gerät `fullResync` und entfernte seine lokalen, nicht als dirty markierten Zeilen. Ein Gerät mit neuer App kann danach weiter migrieren (der Server ist leer, lokal werden alle Zeilen dirty).
+3. Danach die betroffenen Tabellen mit `VACUUM FULL` zurückschreiben (aktualisierte und gelöschte Zeilen halten Klartext in toten Tupeln; sperrt die Tabellen, also im Wartungsfenster); alte Backups laufen nach der Rotation (14 Tage) aus.
+
+### Auswirkungen
+
+- **Admin-Seite:** verschlüsselte Zeilen zeigen „🔒 verschlüsselt"; der Namensfilter sieht nur Klartext-Konten. Zusätzlich zeigt sie je Konto den Zustand (`plaintext`, `migrating`, `encrypted`), im JSON als `encryptionState` je Liste; so sieht man vor Ablauf der Frist, wer noch nicht migriert hat.
+- **Statusseite:** Zähler je Konto-Zustand.
+- Der Server kann Längen und Typen der verschlüsselten Felder nicht mehr prüfen (Validierung nur noch in der App).
+
+### Umsetzung (Server)
+
+| Teil | Wo |
+|---|---|
+| Zustand, Frist, Header, Formatprüfung | `App\Entity\EncryptionState`, `App\Encryption\EncryptionPolicy` (`SPISKI_ENCRYPTION_DEADLINE`), `ClientProtocol`, `CipherFormat` |
+| `begin`/`commit`/Zustand | `App\Encryption\EncryptionService`, `App\Controller\EncryptionController`; exklusive `SyncLock`-Sperre + `FOR UPDATE` auf die Kontozeile |
+| `426` am Eingang | `App\EventListener\ProtocolGuardListener` (nach der Firewall). Verbindlich prüft der Sync noch einmal **unter der Kontosperre** (`SyncService::guardEncryption`), weil ein `begin` zwischen beiden liegen kann |
+| Sync | `SyncRequestParser` (entweder Klartext oder `enc`, nie beides), `SyncService::decide` (unbedingtes Ersetzen in `migrating`), Form muss zum Zustand passen (sonst `invalid`), `SyncResponseSerializer` (verschlüsselt nur `enc`/`wrappedKey`; Mitglieder bekommen ihren eigenen `wrappedKey` aus `list_member`) |
+| Teilen | `ShareService::join` (Zustände, `wrappedKey`), `detachForEncryption` (für `begin` und den direkten `commit`) |
+| Frist-Job | `bin/console app:purge-plaintext [--dry-run]` (`App\Command\PurgePlaintextCommand`): nur nach der Frist, nur `plaintext`-Konten; `migrating` bleibt unberührt |
+| Admin, Status | `name: null` + `encrypted: true` + `encryptionState`; Statuszähler `statistics.encryption` |
+| Teilen-Seite | `public/join.js` hängt `#k=…&l=…` (Listenschlüssel und Listen-ID) an den Verweis zur Web-App |
+| Tests | `tests/Functional/EncryptionTest.php` |
+
+API-Version 1.1.0. Phasen der App und Testliste: `app/docs/07-verschluesselung.md`.
 

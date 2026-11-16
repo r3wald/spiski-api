@@ -10,7 +10,7 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 /**
  * Welcher Code-Stand laeuft: Git-Revision und Zeitpunkt des Deployments.
  *
- * Beides schreibt `update.sh` beim Deployment nach `build-info.json` im Projektverzeichnis
+ * Beides schreiben `update-prod.sh` bzw. `update-staging.sh` beim Deployment nach `build-info.json` im Projektverzeichnis
  * (nicht im Repo, nicht unter public/). Lokal fehlt die Datei, dann sind beide Werte null.
  * Der Inhalt wird streng geprueft, weil er unauthentifiziert ausgeliefert wird.
  */

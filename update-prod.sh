@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+#
+# Deployt dieses Verzeichnis (api/) in die PRODUKTION und startet die Anwendung neu.
+#
+#   Server-Verzeichnis  ~/spiski
+#   URL                 https://spiski.r3wald.net  (Nginx -> 127.0.0.1:8081)
+#   Make-Targets        prod-*  (compose.prod.yaml mit .env.prod)
+#
+#   ./update-prod.sh
+#
+# Gegenstueck fuer Staging: update-staging.sh. Beide Skripte sind bis auf den Block
+# "Ziel" gleich – Aenderungen bitte in beiden nachziehen.
+#
+# Voraussetzungen auf dem Server: ssh-Host "private", docker (mit compose) und make.
+
+set -euo pipefail
+
+# --- Ziel ------------------------------------------------------------------------
+HOST="private"
+REMOTE_DIR="spiski"
+STAGE="prod"
+OTHER_ENV=".env.staging"   # Secrets der jeweils anderen Stage nie mitkopieren
+# ---------------------------------------------------------------------------------
+
+ENV_FILE=".env.${STAGE}"
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+if [[ ! -f "${ENV_FILE}" ]]; then
+  echo "update: ${ENV_FILE} fehlt - ohne Secrets kein Deployment." >&2
+  exit 1
+fi
+
+# Code, compose.prod.yaml, Makefile, bin/backup.sh und die Env-Datei dieser Stage
+# (Rechte 600 bleiben erhalten). vendor/ wird nicht kopiert: composer install laeuft
+# beim Image-Bau.
+rsync -av ./ "${HOST}:${REMOTE_DIR}/" \
+  --exclude=.git \
+  --exclude=vendor \
+  --exclude=tests \
+  --exclude='var/' \
+  --exclude=backups \
+  --exclude='*.md' \
+  --exclude='update-*.sh' \
+  --exclude="${OTHER_ENV}"
+
+# Code-Stand fuer /status.json und /status.html (App\Status\BuildInfo). Landet ueber
+# "COPY . ." im Image. Nicht im Repo; "-dirty" = mit uncommitteten Aenderungen deployt.
+REVISION="$(git rev-parse --short HEAD 2>/dev/null || true)"
+if [[ -n "${REVISION}" && -n "$(git status --porcelain 2>/dev/null)" ]]; then
+  REVISION="${REVISION}-dirty"
+fi
+printf '{"revision": "%s", "deployedAt": "%s"}\n' "${REVISION}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  | ssh "${HOST}" "cat > ${REMOTE_DIR}/build-info.json"
+
+# rsync loescht nichts: Reste der frueheren statischen Admin-Seite (public/admin/) wuerde
+# Caddy sonst weiter ausliefern. /admin kommt jetzt aus PHP.
+ssh "${HOST}" "rm -rf ${REMOTE_DIR}/public/admin"
+
+# Reihenfolge: Image bauen, Schema migrieren, Stack aktualisieren, php + caddy neu starten.
+# Migriert wird vor dem Start des neuen Codes, damit er nie auf einem alten Schema laeuft.
+# make bricht beim ersten fehlgeschlagenen Target ab; zusammen mit set -e stoppt dann alles.
+ssh "${HOST}" "cd ${REMOTE_DIR} && make ${STAGE}-build ${STAGE}-migrate ${STAGE}-up ${STAGE}-restart"

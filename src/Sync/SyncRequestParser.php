@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Sync;
 
+use App\Encryption\CipherFormat;
 use App\Exception\ApiProblemException;
 use App\Sync\Dto\ItemChange;
 use App\Sync\Dto\ListChange;
@@ -129,18 +130,12 @@ final class SyncRequestParser
      */
     private function parseListRow(Uuid $id, array $row, \DateTimeImmutable $now): ?ListChange
     {
-        $name = $this->optionalString($row, 'name');
         $color = $this->optionalInt($row, 'color');
         $sortOrder = $this->optionalInt($row, 'sortOrder');
         $createdAt = $this->optionalTimestamp($row, 'createdAt');
         $updatedAt = $this->optionalTimestamp($row, 'updatedAt');
 
-        if (null === $name || null === $color || null === $sortOrder || null === $createdAt || null === $updatedAt) {
-            return null;
-        }
-
-        $nameLength = mb_strlen($name);
-        if ($nameLength < 1 || $nameLength > SyncLimits::MAX_LIST_NAME_LENGTH) {
+        if (null === $color || null === $sortOrder || null === $createdAt || null === $updatedAt) {
             return null;
         }
 
@@ -152,6 +147,31 @@ final class SyncRequestParser
             return null;
         }
 
+        // Verschluesselte Zeile (CLAUDE.md 14): der Name steckt in `enc`, dazu
+        // der verpackte Listenschluessel. Klartext daneben waere ein Leck.
+        $enc = $row['enc'] ?? null;
+        $wrappedKey = $row['wrappedKey'] ?? null;
+        if (null !== $enc) {
+            if (!CipherFormat::isEnc($enc) || !CipherFormat::isShort($wrappedKey) || !$this->isAbsent($row, 'name')) {
+                return null;
+            }
+            \assert(\is_string($enc) && \is_string($wrappedKey));
+            $name = null;
+        } else {
+            if (null !== $wrappedKey) {
+                return null;
+            }
+            $name = $this->optionalString($row, 'name');
+            if (null === $name) {
+                return null;
+            }
+            $nameLength = mb_strlen($name);
+            if ($nameLength < 1 || $nameLength > SyncLimits::MAX_LIST_NAME_LENGTH) {
+                return null;
+            }
+            $wrappedKey = null;
+        }
+
         return new ListChange(
             $id,
             $name,
@@ -160,6 +180,8 @@ final class SyncRequestParser
             $createdAt,
             $this->clockSkewGuard->clamp($updatedAt, $now),
             $this->optionalTimestamp($row, 'deletedAt'),
+            $enc,
+            $wrappedKey,
         );
     }
 
@@ -173,17 +195,11 @@ final class SyncRequestParser
             return null;
         }
 
-        $name = $this->optionalString($row, 'name');
         $sortOrder = $this->optionalInt($row, 'sortOrder');
         $createdAt = $this->optionalTimestamp($row, 'createdAt');
         $updatedAt = $this->optionalTimestamp($row, 'updatedAt');
 
-        if (null === $name || null === $sortOrder || null === $createdAt || null === $updatedAt) {
-            return null;
-        }
-
-        $nameLength = mb_strlen($name);
-        if ($nameLength < 1 || $nameLength > SyncLimits::MAX_ITEM_NAME_LENGTH) {
+        if (null === $sortOrder || null === $createdAt || null === $updatedAt) {
             return null;
         }
 
@@ -196,29 +212,57 @@ final class SyncRequestParser
             return null;
         }
 
-        $quantity = $row['quantity'] ?? null;
-        if (null !== $quantity) {
-            if (!\is_int($quantity) && !\is_float($quantity)) {
-                return null;
-            }
-            $quantity = (float) $quantity;
-            if ($quantity < 0 || !is_finite($quantity)) {
-                return null;
-            }
-        }
-
-        $unit = $this->nullableBoundedString($row, 'unit', SyncLimits::MAX_UNIT_LENGTH);
-        if (false === $unit) {
-            return null;
-        }
-
-        $note = $this->nullableBoundedString($row, 'note', SyncLimits::MAX_NOTE_LENGTH);
-        if (false === $note) {
-            return null;
-        }
-
         if (!$this->isNullableTimestampValid($row, 'deletedAt') || !$this->isNullableTimestampValid($row, 'movedAt')) {
             return null;
+        }
+
+        // Verschluesselte Zeile (CLAUDE.md 14): Name, Menge, Einheit und Notiz
+        // stecken in `enc`. Der Server kann sie nicht pruefen, nur das Format.
+        $enc = $row['enc'] ?? null;
+        if (null !== $enc) {
+            if (!CipherFormat::isEnc($enc)) {
+                return null;
+            }
+            foreach (['name', 'quantity', 'unit', 'note'] as $plain) {
+                if (!$this->isAbsent($row, $plain)) {
+                    return null;
+                }
+            }
+            \assert(\is_string($enc));
+            $name = null;
+            $quantity = null;
+            $unit = null;
+            $note = null;
+        } else {
+            $name = $this->optionalString($row, 'name');
+            if (null === $name) {
+                return null;
+            }
+            $nameLength = mb_strlen($name);
+            if ($nameLength < 1 || $nameLength > SyncLimits::MAX_ITEM_NAME_LENGTH) {
+                return null;
+            }
+
+            $quantity = $row['quantity'] ?? null;
+            if (null !== $quantity) {
+                if (!\is_int($quantity) && !\is_float($quantity)) {
+                    return null;
+                }
+                $quantity = (float) $quantity;
+                if ($quantity < 0 || !is_finite($quantity)) {
+                    return null;
+                }
+            }
+
+            $unit = $this->nullableBoundedString($row, 'unit', SyncLimits::MAX_UNIT_LENGTH);
+            if (false === $unit) {
+                return null;
+            }
+
+            $note = $this->nullableBoundedString($row, 'note', SyncLimits::MAX_NOTE_LENGTH);
+            if (false === $note) {
+                return null;
+            }
         }
 
         return new ItemChange(
@@ -234,7 +278,19 @@ final class SyncRequestParser
             $this->clockSkewGuard->clamp($updatedAt, $now),
             $this->optionalTimestamp($row, 'deletedAt'),
             $this->optionalTimestamp($row, 'movedAt'),
+            $enc,
         );
+    }
+
+    /**
+     * Feld fehlt oder ist `null`. Bei verschluesselten Zeilen duerfen die
+     * Klartext-Felder nicht gesetzt sein.
+     *
+     * @param array<mixed> $row
+     */
+    private function isAbsent(array $row, string $key): bool
+    {
+        return null === ($row[$key] ?? null);
     }
 
     /**

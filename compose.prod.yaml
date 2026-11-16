@@ -1,15 +1,25 @@
-# Produktions-Stack: FrankenPHP (Code im Image, mit Mercure-Hub), PostgreSQL.
+# Server-Stack: FrankenPHP (Code im Image, mit Mercure-Hub), PostgreSQL.
+#
+# Dieselbe Datei fuer beide Server-Umgebungen, jeweils in einem eigenen Verzeichnis:
+#
+#   Stage     Verzeichnis   Compose-Projekt  Env-Datei     Port  URL
+#   prod      ~/spiski      spiski-prod      .env.prod     8081  https://spiski.r3wald.net
+#   staging   ~/spiski-dev  spiski-staging   .env.staging  8082  https://spiski-dev.r3wald.net
+#
+# Das Compose-Projekt trennt Container, Netz und Volumes (eigene Datenbank). SPISKI_STAGE
+# waehlt Env-Datei und Image-Tag. Alles zusammen setzen die Make-Targets (make prod-up,
+# make staging-up, ...); direkt aufgerufen gilt prod:
+#
+#   docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
+#   SPISKI_STAGE=staging HTTP_PORT=8082 docker compose -p spiski-staging \
+#     --env-file .env.staging -f compose.prod.yaml up -d --build
 #
 # Nur lokal erreichbar: FrankenPHP lauscht ausschliesslich auf 127.0.0.1. TLS und die
 # oeffentliche Erreichbarkeit uebernimmt der Nginx-Reverse-Proxy auf dem Host
-# (Beispiel-Konfiguration in README.md, Abschnitt "Produktion").
+# (Beispiel-Konfiguration in README.md, Abschnitt "Server").
 #
-# Immer mit --env-file aufrufen, sonst fehlt POSTGRES_PASSWORD – am einfachsten
-# ueber die Make-Targets (make prod-up, prod-migrate, ...):
-#
-#   docker compose --env-file .env.prod -f compose.prod.yaml up -d --build
-#
-# Secrets stehen ausschliesslich in .env.prod (nicht im Repo, nicht im Image).
+# Immer mit --env-file aufrufen, sonst fehlt POSTGRES_PASSWORD. Secrets stehen
+# ausschliesslich in .env.prod bzw. .env.staging (nicht im Repo, nicht im Image).
 
 name: spiski-prod
 
@@ -17,8 +27,9 @@ x-php: &php
   build:
     context: .
     target: prod
-  image: spiski-api:prod
-  env_file: .env.prod
+  # Eigener Tag je Stage: Ein Staging-Build darf das Prod-Image nicht ueberschreiben.
+  image: spiski-api:${SPISKI_STAGE:-prod}
+  env_file: .env.${SPISKI_STAGE:-prod}
 
 services:
   php:
@@ -26,10 +37,11 @@ services:
     restart: unless-stopped
     environment:
       # Signiert Publisher- und Abo-Token; Hub und Symfony lesen denselben Wert.
-      MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET:?MERCURE_JWT_SECRET fehlt - in .env.prod setzen (mind. 32 Zeichen)}
+      MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET:?MERCURE_JWT_SECRET fehlt - in .env.prod bzw. .env.staging setzen (mind. 32 Zeichen)}
     ports:
       # Bewusst an Loopback gebunden. Nicht auf 0.0.0.0 aendern: FrankenPHP
       # spricht hier kein TLS, und der Bearer-Token waere im Klartext lesbar.
+      # Port je Stage aus dem Makefile: prod 8081, staging 8082.
       - "127.0.0.1:${HTTP_PORT:-8081}:80"
     volumes:
       - ./docker/frankenphp/Caddyfile.prod:/etc/frankenphp/Caddyfile:ro
@@ -53,7 +65,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-spiski}
       POSTGRES_USER: ${POSTGRES_USER:-spiski}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt - mit --env-file .env.prod aufrufen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt - mit --env-file .env.prod bzw. .env.staging aufrufen}
       # Deterministische Zeitzone: alle TIMESTAMPTZ-Werte werden in UTC gehalten.
       TZ: UTC
       PGTZ: UTC
@@ -69,7 +81,7 @@ services:
       # der Mount gehoert deshalb auf /var/lib/postgresql, nicht auf .../data.
       - postgres_data:/var/lib/postgresql
 
-  # Einmalig pro Deployment: make prod-migrate
+  # Einmalig pro Deployment: make prod-migrate bzw. make staging-migrate
   migrate:
     <<: *php
     profiles: ["tools"]

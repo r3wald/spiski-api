@@ -85,6 +85,14 @@ class ShoppingItem
     #[ORM\Column(type: UuidType::NAME, nullable: true)]
     private ?Uuid $lastUserId = null;
 
+    /**
+     * Verschluesselter Inhalt (Name, Menge, Einheit, Notiz; CLAUDE.md 14),
+     * `null` bei Klartext-Zeilen. Bei verschluesselten Zeilen sind `name` (leerer
+     * Platzhalter), `quantity`, `unit` und `note` leer.
+     */
+    #[ORM\Column(type: Types::TEXT, nullable: true)]
+    private ?string $enc = null;
+
     public function __construct(Uuid $id, User $user, ShoppingList $list)
     {
         $this->id = $id;
@@ -106,7 +114,10 @@ class ShoppingItem
         // Ein Artikel zaehlt immer zum Besitzer seiner Liste – auch wenn ihn ein
         // Mitglied einer geteilten Liste angelegt hat (Kontingent, CLAUDE.md 12).
         $this->user = $list->getUser();
-        $this->name = $change->name;
+        // Verschluesselt: Der Parser laesst Menge, Einheit und Notiz dann leer;
+        // so bleibt beim Umstellen kein Klartext zurueck (CLAUDE.md 14).
+        $this->name = $change->name ?? '';
+        $this->enc = $change->enc;
         $this->quantity = $change->quantity;
         $this->unit = $change->unit;
         $this->isChecked = $change->isChecked;
@@ -194,6 +205,16 @@ class ShoppingItem
     public function getLastClientId(): Uuid
     {
         return $this->lastClientId;
+    }
+
+    public function getEnc(): ?string
+    {
+        return $this->enc;
+    }
+
+    public function isEncrypted(): bool
+    {
+        return null !== $this->enc;
     }
 
     public function getLastUserId(): ?Uuid

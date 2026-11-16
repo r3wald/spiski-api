@@ -21,6 +21,7 @@ final class SyncResult
      * @param list<string>        $revokedListIds Listen, auf die das Konto keinen Zugriff mehr hat
      * @param array<string, int>  $memberCounts   Listen-ID => Zahl der Mitglieder
      * @param array<string, \DateTimeImmutable> $joinedAt Listen-ID => Beitritt des abfragenden Kontos (nur Mitgliedschaften)
+     * @param array<string, string> $memberWrappedKeys Listen-ID => Listenschluessel, mit dem Kontoschluessel des abfragenden Kontos verpackt (nur Mitgliedschaften verschluesselter Listen)
      */
     public function __construct(
         public readonly int $serverCursor,
@@ -35,6 +36,7 @@ final class SyncResult
         public readonly array $revokedListIds = [],
         public readonly array $memberCounts = [],
         public readonly array $joinedAt = [],
+        public readonly array $memberWrappedKeys = [],
     ) {
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Encryption\CipherFormat;
 use App\Entity\User;
 use App\Exception\ApiProblemException;
 use App\Sharing\ShareService;
@@ -96,15 +97,21 @@ final class ShareController
     #[Route('/v1/shares/{code}', name: 'v1_share_join', methods: ['POST'])]
     #[OA\Post(
         summary: 'Einer geteilten Liste beitreten',
-        description: 'Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.',
+        description: <<<'TEXT'
+            Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.
+
+            Verschluesselte Listen: Besitzer und Mitglied muessen beide verschluesselt sein, und der Body traegt `wrappedKey` – den Listenschluessel aus dem Link-Fragment, mit dem eigenen Kontoschluessel verpackt. Ein erneuter Beitritt mit `wrappedKey` ersetzt den gespeicherten.
+            TEXT,
         tags: ['Sharing'],
     )]
     #[OA\Parameter(name: 'code', in: 'path', required: true, schema: new OA\Schema(type: 'string'))]
+    #[OA\RequestBody(required: false, content: new OA\JsonContent(ref: '#/components/schemas/JoinRequest'))]
     #[OA\Response(response: 200, description: 'Beigetreten', content: new OA\JsonContent(ref: '#/components/schemas/JoinResult'))]
+    #[OA\Response(response: 400, description: '`wrappedKey` fehlt (verschluesselte Liste) oder ist ungueltig', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 404, description: 'Code unbekannt oder nicht mehr gueltig', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 409, description: 'Zu viele Mitglieder bzw. geteilte Listen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(response: 409, description: 'Zu viele Mitglieder bzw. geteilte Listen, oder `encryption-required` (Besitzer und Mitglied nicht im selben Verschluesselungszustand)', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
     #[OA\Response(response: 429, description: 'Zu viele Versuche, siehe Retry-After', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    public function join(string $code, #[CurrentUser] User $user): JsonResponse
+    public function join(string $code, Request $request, #[CurrentUser] User $user): JsonResponse
     {
         $limit = $this->shareJoinLimiter->create(hash('xxh128', $user->getUserIdentifier()))->consume();
         if (!$limit->isAccepted()) {
@@ -114,7 +121,38 @@ final class ShareController
             );
         }
 
-        return new JsonResponse(['listId' => $this->shares->join($user, $code, $this->clock->now())]);
+        return new JsonResponse(['listId' => $this->shares->join($user, $code, $this->clock->now(), $this->wrappedKey($request))]);
+    }
+
+    /**
+     * Optionaler Body `{"wrappedKey": "v1.…"}`; leerer Body wie bisher.
+     */
+    private function wrappedKey(Request $request): ?string
+    {
+        $content = trim($request->getContent());
+        if ('' === $content) {
+            return null;
+        }
+
+        try {
+            $body = json_decode($content, true, 4, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            throw ApiProblemException::badRequest('Request-Body ist kein gueltiges JSON.');
+        }
+        if (!\is_array($body)) {
+            throw ApiProblemException::badRequest('Request-Body muss ein JSON-Objekt sein.');
+        }
+
+        $wrappedKey = $body['wrappedKey'] ?? null;
+        if (null === $wrappedKey) {
+            return null;
+        }
+        if (!CipherFormat::isShort($wrappedKey)) {
+            throw ApiProblemException::badRequest('"wrappedKey" hat nicht das Format v1.<nonce>.<chiffretext>.');
+        }
+        \assert(\is_string($wrappedKey));
+
+        return $wrappedKey;
     }
 
     private function listId(string $id): string

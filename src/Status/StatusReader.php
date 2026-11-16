@@ -28,7 +28,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  *         accounts: array{total: int, active24h: int, active7d: int, active30d: int},
  *         lists: array{active: int, deleted: int, shared: int},
  *         items: array{active: int, archived: int},
- *         memberships: int
+ *         memberships: int,
+ *         encryption: array{plaintext: int, migrating: int, encrypted: int}
  *     }
  * }
  */
@@ -131,7 +132,8 @@ final class StatusReader
      *     accounts: array{total: int, active24h: int, active7d: int, active30d: int},
      *     lists: array{active: int, deleted: int, shared: int},
      *     items: array{active: int, archived: int},
-     *     memberships: int
+     *     memberships: int,
+     *     encryption: array{plaintext: int, migrating: int, encrypted: int}
      * }|null
      */
     private function statistics(\DateTimeImmutable $now): ?array
@@ -154,7 +156,10 @@ final class StatusReader
                             WHERE l.deleted_at IS NULL) AS lists_shared,
                         (SELECT COUNT(*) FROM shopping_item WHERE deleted_at IS NULL) AS items_active,
                         (SELECT COUNT(*) FROM shopping_item WHERE deleted_at IS NOT NULL) AS items_archived,
-                        (SELECT COUNT(*) FROM list_member) AS memberships
+                        (SELECT COUNT(*) FROM list_member) AS memberships,
+                        (SELECT COUNT(*) FROM app_user WHERE encryption_state = 'plaintext') AS enc_plaintext,
+                        (SELECT COUNT(*) FROM app_user WHERE encryption_state = 'migrating') AS enc_migrating,
+                        (SELECT COUNT(*) FROM app_user WHERE encryption_state = 'encrypted') AS enc_encrypted
                     SQL,
                 [
                     'day' => $now->modify('-1 day')->format($format),
@@ -187,6 +192,12 @@ final class StatusReader
                 'archived' => (int) $row['items_archived'],
             ],
             'memberships' => (int) $row['memberships'],
+            // Konten je Zustand der Umstellung auf Verschluesselung (CLAUDE.md 14).
+            'encryption' => [
+                'plaintext' => (int) $row['enc_plaintext'],
+                'migrating' => (int) $row['enc_migrating'],
+                'encrypted' => (int) $row['enc_encrypted'],
+            ],
         ];
     }
 }

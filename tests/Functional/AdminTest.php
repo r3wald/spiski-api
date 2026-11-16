@@ -456,7 +456,7 @@ final class AdminTest extends ApiTestCase
         self::assertEquals(1.0, $items[0]['quantity'], 'JSON kennt nur number: 1.0 kommt als 1 an.');
         self::assertSame('St', $items[0]['unit']);
         self::assertFalse($items[0]['isChecked']);
-        self::assertSame(['id', 'name', 'quantity', 'unit', 'isChecked', 'note', 'sortOrder', 'createdAt', 'updatedAt', 'deletedAt', 'movedAt'], array_keys($items[0]));
+        self::assertSame(['id', 'encrypted', 'name', 'quantity', 'unit', 'isChecked', 'note', 'sortOrder', 'createdAt', 'updatedAt', 'deletedAt', 'movedAt'], array_keys($items[0]));
     }
 
     public function testItemsDoNotExposeAccountIdentifiers(): void

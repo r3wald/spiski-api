@@ -15,7 +15,8 @@ final class ItemChange
     public function __construct(
         public readonly Uuid $id,
         public readonly Uuid $listId,
-        public readonly string $name,
+        /** `null` bei verschluesselten Zeilen; dann stehen die Inhalte in $enc. */
+        public readonly ?string $name,
         public readonly ?float $quantity,
         public readonly ?string $unit,
         public readonly bool $isChecked,
@@ -25,6 +26,13 @@ final class ItemChange
         public readonly \DateTimeImmutable $updatedAt,
         public readonly ?\DateTimeImmutable $deletedAt,
         public readonly ?\DateTimeImmutable $movedAt,
+        /** Verschluesselter Inhalt: Name, Menge, Einheit, Notiz (CLAUDE.md 14). */
+        public readonly ?string $enc = null,
     ) {
+    }
+
+    public function isEncrypted(): bool
+    {
+        return null !== $this->enc;
     }
 }

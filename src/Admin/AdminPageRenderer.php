@@ -99,13 +99,37 @@ final class AdminPageRenderer
         $total = (int) $list['itemCount'];
 
         return '<tr'.('' === $classes ? '' : ' class="'.$classes.'"').'>'
-            .'<td><div class="name">'.$this->dot((int) $list['color']).'<span class="label">'.$this->e((string) $list['name']).'</span></div></td>'
-            .'<td><code>'.$this->e((string) $list['owner']).'</code></td>'
+            .'<td><div class="name">'.$this->dot((int) $list['color']).$this->label($list).'</div></td>'
+            .'<td><code>'.$this->e((string) $list['owner']).'</code>'.$this->encryptionState((string) $list['encryptionState']).'</td>'
             .'<td>'.$this->access($list).'</td>'
             .'<td class="num">'.$active.' / '.$total.'</td>'
             .'<td><time datetime="'.$this->e((string) $list['updatedAt']).'">'.$this->e($this->display((string) $list['updatedAt'])).'</time></td>'
             .'<td class="status'.($deleted ? ' deleted' : '').'">'.($deleted ? 'gelöscht' : 'aktiv').'</td>'
             .'</tr>'.$itemsRow;
+    }
+
+    /**
+     * Name einer Liste oder eines Eintrags; verschluesselte kann der Server nicht lesen.
+     *
+     * @param array<string, mixed> $row
+     */
+    private function label(array $row, string $plain = ''): string
+    {
+        if (true === $row['encrypted']) {
+            return '<span class="label encrypted">🔒 verschlüsselt</span>';
+        }
+
+        return '<span class="label">'.$this->e('' === $plain ? (string) $row['name'] : $plain).'</span>';
+    }
+
+    /** Zustand des Kontos bei der Umstellung auf Verschluesselung (CLAUDE.md 14). */
+    private function encryptionState(string $state): string
+    {
+        return match ($state) {
+            'encrypted' => '<span class="sub">verschlüsselt</span>',
+            'migrating' => '<span class="sub"><span class="tag">wird umgestellt</span></span>',
+            default => '<span class="sub">unverschlüsselt</span>',
+        };
     }
 
     /**
@@ -193,7 +217,7 @@ final class AdminPageRenderer
         return '<li class="item'.($archived ? ' archived' : '').($checked ? ' done' : '').'">'
             .'<span class="box" aria-hidden="true">'.($checked ? '☑' : '☐').'</span>'
             .'<span class="visually-hidden">'.($checked ? 'erledigt: ' : 'offen: ').'</span>'
-            .'<span class="label">'.$this->e(implode(' ', $parts)).'</span>'
+            .$this->label($item, implode(' ', $parts))
             .$tags.$note
             .'</li>';
     }
@@ -299,6 +323,7 @@ final class AdminPageRenderer
         .tag.danger{color:var(--danger)}
         .tag.shared{color:var(--accent-text);background:var(--accent)}
         .sub{display:block;font-size:.8rem;color:var(--muted)}
+        .label.encrypted{color:var(--muted);font-style:italic}
         .muted-inline{color:var(--muted);font-size:.9rem}
         .note-text{flex-basis:100%;padding-left:26px;font-size:.85rem;color:var(--muted)}
         .pager{display:flex;justify-content:center;gap:24px;margin-top:16px}

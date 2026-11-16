@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Sharing;
 
+use App\Entity\EncryptionState;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 
@@ -127,6 +128,51 @@ final class ListAccess
         );
 
         return array_map(static fn (string $value): \DateTimeImmutable => new \DateTimeImmutable($value), $rows);
+    }
+
+    /**
+     * Verpackte Listenschluessel dieses Kontos als Mitglied (CLAUDE.md 14).
+     * Eigene Listen und Klartext-Listen fehlen im Ergebnis.
+     *
+     * @param list<string> $listIds
+     *
+     * @return array<string, string> Listen-ID => wrappedKey
+     */
+    public function memberWrappedKeys(string $userId, array $listIds): array
+    {
+        if ([] === $listIds) {
+            return [];
+        }
+
+        /** @var array<string, string> */
+        return $this->connection->fetchAllKeyValue(
+            'SELECT list_id, wrapped_key FROM list_member WHERE user_id = :user AND wrapped_key IS NOT NULL AND list_id IN (:ids)',
+            ['user' => $userId, 'ids' => array_values(array_unique($listIds))],
+            ['ids' => ArrayParameterType::STRING],
+        );
+    }
+
+    /**
+     * Verschluesselungszustand der angegebenen Konten (CLAUDE.md 14).
+     *
+     * @param list<string> $userIds
+     *
+     * @return array<string, EncryptionState> Konto-ID => Zustand
+     */
+    public function encryptionStates(array $userIds): array
+    {
+        if ([] === $userIds) {
+            return [];
+        }
+
+        /** @var array<string, string> $rows */
+        $rows = $this->connection->fetchAllKeyValue(
+            'SELECT id, encryption_state FROM app_user WHERE id IN (:ids)',
+            ['ids' => array_values(array_unique($userIds))],
+            ['ids' => ArrayParameterType::STRING],
+        );
+
+        return array_map(EncryptionState::from(...), $rows);
     }
 
     /**

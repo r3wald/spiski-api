@@ -51,6 +51,7 @@ final class StatusPageRenderer
                 .$this->row('Listen', $this->n($stats['lists']['active']).' <span class="muted">(+ '.$this->n($stats['lists']['deleted']).' gelöscht)</span>')
                 .$this->row('davon geteilt', $this->n($stats['lists']['shared']).' <span class="muted">('.$this->n($stats['memberships']).' Mitgliedschaften)</span>')
                 .$this->row('Einträge', $this->n($stats['items']['active']).' <span class="muted">(+ '.$this->n($stats['items']['archived']).' archiviert)</span>')
+                .$this->row('Konten verschlüsselt', $this->n($stats['encryption']['encrypted']).' <span class="muted">('.$this->n($stats['encryption']['migrating']).' in Umstellung, '.$this->n($stats['encryption']['plaintext']).' unverschlüsselt)</span>')
                 .'</dl>';
 
         return '<!doctype html>'

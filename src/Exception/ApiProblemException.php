@@ -96,6 +96,43 @@ final class ApiProblemException extends \RuntimeException
         return new self(422, self::TYPE_BASE.'out-of-range', 'Unprocessable Content', $detail);
     }
 
+    /**
+     * Die App ist zu alt fuer dieses Konto: Es ist (oder wird gerade)
+     * verschluesselt, oder die Frist fuer die Umstellung ist abgelaufen
+     * (CLAUDE.md 14). Eine alte App wuerde sonst Platzhalter-Namen uebernehmen.
+     */
+    public static function upgradeRequired(string $detail): self
+    {
+        return new self(426, self::TYPE_BASE.'upgrade-required', 'Upgrade Required', $detail);
+    }
+
+    /** Ein anderes Geraet desselben Kontos stellt gerade auf Verschluesselung um. */
+    public static function migrationInProgress(string $detail): self
+    {
+        return new self(409, self::TYPE_BASE.'migration-in-progress', 'Conflict', $detail);
+    }
+
+    /** Das Konto ist schon verschluesselt; dieses Geraet braucht den Konto-Code. */
+    public static function alreadyEncrypted(string $detail): self
+    {
+        return new self(409, self::TYPE_BASE.'already-encrypted', 'Conflict', $detail);
+    }
+
+    /** `commit`, obwohl noch Klartext-Zeilen auf dem Server liegen. */
+    public static function encryptionIncomplete(string $detail): self
+    {
+        return new self(409, self::TYPE_BASE.'encryption-incomplete', 'Conflict', $detail);
+    }
+
+    /**
+     * Verschluesselung fehlt: beim Beitritt (Besitzer und Mitglied muessen im
+     * selben Zustand sein) oder beim Sync nach Ablauf der Frist.
+     */
+    public static function encryptionRequired(string $detail): self
+    {
+        return new self(409, self::TYPE_BASE.'encryption-required', 'Conflict', $detail);
+    }
+
     public static function tooManyRequests(string $detail, int $retryAfterSeconds): self
     {
         return new self(
