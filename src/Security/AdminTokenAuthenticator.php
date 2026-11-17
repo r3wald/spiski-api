@@ -36,9 +36,9 @@ final class AdminTokenAuthenticator extends AbstractAuthenticator implements Aut
         private readonly RateLimiterFactoryInterface $adminLimiter,
         private readonly ProblemResponseFactory $problems,
         private readonly ClockInterface $clock,
+        #[\SensitiveParameter]
         private readonly string $adminToken,
-    ) {
-    }
+    ) {}
 
     public function supports(Request $request): bool
     {
@@ -57,24 +57,32 @@ final class AdminTokenAuthenticator extends AbstractAuthenticator implements Aut
             );
         }
 
-        $header = $request->headers->get('Authorization', '');
+        $header = $request->headers->get('Authorization') ?? '';
         if (1 !== preg_match('/^Bearer\s+(\S+)$/i', $header, $matches)) {
-            throw new CustomUserMessageAuthenticationException('Header "Authorization: Bearer <token>" fehlt oder ist unlesbar.');
+            throw new CustomUserMessageAuthenticationException(
+                'Header "Authorization: Bearer <token>" fehlt oder ist unlesbar.',
+            );
         }
 
         // Bewusst dieselbe Meldung fuer "falsch" und "abgeschaltet": von aussen
         // soll nicht erkennbar sein, ob ein Admin-Zugang konfiguriert ist.
         if (!$this->isEnabled() || !hash_equals($this->adminToken, $matches[1])) {
-            throw new CustomUserMessageAuthenticationException('Admin-Token ungueltig oder Admin-Zugang nicht aktiviert.');
+            throw new CustomUserMessageAuthenticationException(
+                'Admin-Token ungueltig oder Admin-Zugang nicht aktiviert.',
+            );
         }
 
         return new SelfValidatingPassport(
-            new UserBadge('admin', static fn (): InMemoryUser => new InMemoryUser('admin', null, ['ROLE_ADMIN'])),
+            new UserBadge('admin', static fn(): InMemoryUser => new InMemoryUser('admin', null, ['ROLE_ADMIN'])),
         );
     }
 
-    public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
-    {
+    public function onAuthenticationSuccess(
+        Request $request,
+        #[\SensitiveParameter]
+        TokenInterface $token,
+        string $firewallName,
+    ): ?Response {
         return null;
     }
 
@@ -85,16 +93,12 @@ final class AdminTokenAuthenticator extends AbstractAuthenticator implements Aut
             return $this->problems->fromException($previous);
         }
 
-        return $this->problems->fromException(
-            ApiProblemException::unauthorized($exception->getMessageKey()),
-        );
+        return $this->problems->fromException(ApiProblemException::unauthorized($exception->getMessageKey()));
     }
 
     public function start(Request $request, ?AuthenticationException $authException = null): Response
     {
-        return $this->problems->fromException(
-            ApiProblemException::unauthorized('Authentifizierung erforderlich.'),
-        );
+        return $this->problems->fromException(ApiProblemException::unauthorized('Authentifizierung erforderlich.'));
     }
 
     private function isEnabled(): bool

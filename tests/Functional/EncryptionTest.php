@@ -29,7 +29,10 @@ final class EncryptionTest extends ApiTestCase
     {
         $account = self::uuid();
 
-        self::assertSame(['state' => 'plaintext', 'keyCheck' => null], $this->call('GET', '/v1/me/encryption', $account));
+        self::assertSame(
+            ['state' => 'plaintext', 'keyCheck' => null],
+            $this->call('GET', '/v1/me/encryption', $account),
+        );
         self::assertSame(200, $this->httpStatus());
     }
 
@@ -41,7 +44,13 @@ final class EncryptionTest extends ApiTestCase
         self::assertSame(426, $this->httpStatus());
         self::assertSame('https://spiski.app/problems/upgrade-required', $this->problemType());
 
-        $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => self::uuid(), 'keyCheck' => self::cipher()], protocol: '1');
+        $this->call(
+            'POST',
+            '/v1/me/encryption/begin',
+            $account,
+            ['clientId' => self::uuid(), 'keyCheck' => self::cipher()],
+            protocol: '1',
+        );
         self::assertSame(426, $this->httpStatus());
     }
 
@@ -81,7 +90,10 @@ final class EncryptionTest extends ApiTestCase
         ]);
 
         $keyCheck = self::cipher();
-        self::assertSame(['state' => 'migrating', 'keyCheck' => $keyCheck], $this->begin($account, $migrator, $keyCheck));
+        self::assertSame(
+            ['state' => 'migrating', 'keyCheck' => $keyCheck],
+            $this->begin($account, $migrator, $keyCheck),
+        );
 
         // Ab jetzt: alte App ausgesperrt, andere neue Geraete warten.
         $this->request($account, ['since' => 0, 'clientId' => $oldDevice]);
@@ -116,13 +128,24 @@ final class EncryptionTest extends ApiTestCase
         self::assertTrue(self::findPushResult($pushed, 'items', $itemId)['accepted'] ?? false);
 
         /** @var array{name: string, enc: string, wrapped_key: string} $row */
-        $row = $this->connection()->fetchAssociative('SELECT name, enc, wrapped_key FROM shopping_list WHERE id = :id', ['id' => $listId]);
+        $row = $this->connection()->fetchAssociative('SELECT name, enc, wrapped_key FROM shopping_list WHERE id = :id', [
+            'id' => $listId,
+        ]);
         self::assertSame(['name' => '', 'enc' => $listEnc, 'wrapped_key' => $wrappedKey], $row);
         /** @var array{name: string, quantity: mixed, unit: mixed, note: mixed} $item */
-        $item = $this->connection()->fetchAssociative('SELECT name, quantity, unit, note FROM shopping_item WHERE id = :id', ['id' => $itemId]);
-        self::assertSame(['name' => '', 'quantity' => null, 'unit' => null, 'note' => null], $item, 'Kein Klartext bleibt stehen.');
+        $item = $this->connection()->fetchAssociative('SELECT name, quantity, unit, note FROM shopping_item WHERE id = :id', [
+            'id' => $itemId,
+        ]);
+        self::assertSame(
+            ['name' => '', 'quantity' => null, 'unit' => null, 'note' => null],
+            $item,
+            'Kein Klartext bleibt stehen.',
+        );
 
-        self::assertSame(['state' => 'encrypted', 'keyCheck' => $keyCheck], $this->call('POST', '/v1/me/encryption/commit', $account, ['clientId' => $migrator]));
+        self::assertSame(
+            ['state' => 'encrypted', 'keyCheck' => $keyCheck],
+            $this->call('POST', '/v1/me/encryption/commit', $account, ['clientId' => $migrator]),
+        );
 
         // Ein weiteres Geraet mit Konto-Code: bekommt nur Chiffretext.
         $pull = $this->encSync($account, ['since' => 0, 'clientId' => self::uuid()]);
@@ -142,7 +165,12 @@ final class EncryptionTest extends ApiTestCase
         $stale = $this->encSync($account, [
             'since' => 0,
             'clientId' => self::uuid(),
-            'changes' => ['lists' => [self::encListRow($listId, '2026-06-01T08:00:00.000Z', self::cipher(), $wrappedKey)]],
+            'changes' => ['lists' => [self::encListRow(
+                $listId,
+                '2026-06-01T08:00:00.000Z',
+                self::cipher(),
+                $wrappedKey,
+            )]],
         ]);
         self::assertSame('stale', self::findPushResult($stale, 'lists', $listId)['reason'] ?? null);
 
@@ -154,7 +182,10 @@ final class EncryptionTest extends ApiTestCase
         ]);
         self::assertSame('invalid', $plain['pushResults']['lists'][0]['reason'] ?? null);
 
-        $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => $migrator, 'keyCheck' => self::cipher()]);
+        $this->call('POST', '/v1/me/encryption/begin', $account, [
+            'clientId' => $migrator,
+            'keyCheck' => self::cipher(),
+        ]);
         self::assertSame(409, $this->httpStatus());
         self::assertSame('https://spiski.app/problems/already-encrypted', $this->problemType());
     }
@@ -187,7 +218,10 @@ final class EncryptionTest extends ApiTestCase
         $keyCheck = self::cipher();
         self::assertSame(
             ['state' => 'encrypted', 'keyCheck' => $keyCheck],
-            $this->call('POST', '/v1/me/encryption/commit', $account, ['clientId' => self::uuid(), 'keyCheck' => $keyCheck]),
+            $this->call('POST', '/v1/me/encryption/commit', $account, [
+                'clientId' => self::uuid(),
+                'keyCheck' => $keyCheck,
+            ]),
         );
     }
 
@@ -200,7 +234,10 @@ final class EncryptionTest extends ApiTestCase
             'changes' => ['lists' => [self::listRow(self::uuid(), '2026-06-01T10:00:00.000Z')]],
         ]);
 
-        $this->call('POST', '/v1/me/encryption/commit', $account, ['clientId' => self::uuid(), 'keyCheck' => self::cipher()]);
+        $this->call('POST', '/v1/me/encryption/commit', $account, [
+            'clientId' => self::uuid(),
+            'keyCheck' => self::cipher(),
+        ]);
         self::assertSame(409, $this->httpStatus());
         self::assertSame('https://spiski.app/problems/encryption-incomplete', $this->problemType());
     }
@@ -209,13 +246,22 @@ final class EncryptionTest extends ApiTestCase
     {
         $account = self::uuid();
 
-        $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => 'kaputt', 'keyCheck' => self::cipher()]);
+        $this->call('POST', '/v1/me/encryption/begin', $account, [
+            'clientId' => 'kaputt',
+            'keyCheck' => self::cipher(),
+        ]);
         self::assertSame(400, $this->httpStatus());
-        $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => self::uuid(), 'keyCheck' => 'klartext']);
+        $this->call('POST', '/v1/me/encryption/begin', $account, [
+            'clientId' => self::uuid(),
+            'keyCheck' => 'klartext',
+        ]);
         self::assertSame(400, $this->httpStatus());
         $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => self::uuid()]);
         self::assertSame(400, $this->httpStatus());
-        $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => self::uuid(), 'keyCheck' => 'v1.AAAAAAAAAAAAAAAA.'.str_repeat('A', 300)]);
+        $this->call('POST', '/v1/me/encryption/begin', $account, [
+            'clientId' => self::uuid(),
+            'keyCheck' => 'v1.AAAAAAAAAAAAAAAA.' . str_repeat('A', 300),
+        ]);
         self::assertSame(400, $this->httpStatus(), 'keyCheck hoechstens 256 Zeichen.');
 
         self::assertSame('plaintext', $this->call('GET', '/v1/me/encryption', $account)['state'] ?? null);
@@ -228,12 +274,24 @@ final class EncryptionTest extends ApiTestCase
         $this->begin($account, $migrator, self::cipher());
 
         $listId = self::uuid();
-        $withName = self::encListRow(self::uuid(), '2026-06-01T10:00:00.000Z', self::cipher(), self::cipher()) + ['name' => 'Klartext'];
+        $withName = self::encListRow(self::uuid(), '2026-06-01T10:00:00.000Z', self::cipher(), self::cipher())
+        + ['name' => 'Klartext'];
         $withoutKey = self::encListRow(self::uuid(), '2026-06-01T10:00:00.000Z', self::cipher(), null);
-        $badEnc = self::encListRow(self::uuid(), '2026-06-01T10:00:00.000Z', 'v2.AAAAAAAAAAAAAAAA.AAAA', self::cipher());
-        $tooLong = self::encListRow(self::uuid(), '2026-06-01T10:00:00.000Z', 'v1.AAAAAAAAAAAAAAAA.'.str_repeat('A', 6200), self::cipher());
+        $badEnc = self::encListRow(
+            self::uuid(),
+            '2026-06-01T10:00:00.000Z',
+            'v2.AAAAAAAAAAAAAAAA.AAAA',
+            self::cipher(),
+        );
+        $tooLong = self::encListRow(
+            self::uuid(),
+            '2026-06-01T10:00:00.000Z',
+            'v1.AAAAAAAAAAAAAAAA.' . str_repeat('A', 6200),
+            self::cipher(),
+        );
         $good = self::encListRow($listId, '2026-06-01T10:00:00.000Z', self::cipher(), self::cipher());
-        $itemWithNote = self::encItemRow(self::uuid(), $listId, '2026-06-01T10:00:00.000Z', self::cipher()) + ['note' => 'geheim'];
+        $itemWithNote = self::encItemRow(self::uuid(), $listId, '2026-06-01T10:00:00.000Z', self::cipher())
+        + ['note' => 'geheim'];
 
         $response = $this->encSync($account, [
             'since' => 0,
@@ -242,17 +300,28 @@ final class EncryptionTest extends ApiTestCase
         ]);
 
         foreach ([$withName, $withoutKey, $badEnc, $tooLong] as $row) {
-            self::assertSame('invalid', self::findPushResult($response, 'lists', (string) $row['id'])['reason'] ?? null);
+            self::assertSame(
+                'invalid',
+                self::findPushResult($response, 'lists', (string) $row['id'])['reason'] ?? null,
+            );
         }
         self::assertTrue(self::findPushResult($response, 'lists', $listId)['accepted'] ?? false);
-        self::assertSame('invalid', self::findPushResult($response, 'items', (string) $itemWithNote['id'])['reason'] ?? null);
+        self::assertSame(
+            'invalid',
+            self::findPushResult($response, 'items', (string) $itemWithNote['id'])['reason'] ?? null,
+        );
 
         // Ein unverschluesseltes Konto darf keine verschluesselten Zeilen schreiben.
         $plain = self::uuid();
         $response = $this->encSync($plain, [
             'since' => 0,
             'clientId' => self::uuid(),
-            'changes' => ['lists' => [self::encListRow($id = self::uuid(), '2026-06-01T10:00:00.000Z', self::cipher(), self::cipher())]],
+            'changes' => ['lists' => [self::encListRow(
+                $id = self::uuid(),
+                '2026-06-01T10:00:00.000Z',
+                self::cipher(),
+                self::cipher(),
+            )]],
         ]);
         self::assertSame('invalid', self::findPushResult($response, 'lists', $id)['reason'] ?? null);
     }
@@ -278,7 +347,9 @@ final class EncryptionTest extends ApiTestCase
         $this->begin($account, self::uuid(), self::cipher());
 
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM list_member'));
-        self::assertNull($this->connection()->fetchOne('SELECT share_code FROM shopping_list WHERE id = :id', ['id' => $ownList]));
+        self::assertNull($this->connection()->fetchOne('SELECT share_code FROM shopping_list WHERE id = :id', [
+            'id' => $ownList,
+        ]));
 
         $memberView = $this->sync($member, ['since' => $memberCursor, 'clientId' => self::uuid()]);
         self::assertSame([$ownList], $memberView['revokedLists']);
@@ -286,7 +357,7 @@ final class EncryptionTest extends ApiTestCase
         self::assertSame(0, self::findRow($ownerView, 'lists', $foreignList)['memberCount'] ?? null);
 
         // Der alte Code fuehrt nirgends mehr hin.
-        $this->call('POST', '/v1/shares/'.$ownCode, $member, protocol: null);
+        $this->call('POST', '/v1/shares/' . $ownCode, $member, protocol: null);
         self::assertSame(404, $this->httpStatus());
     }
 
@@ -297,7 +368,7 @@ final class EncryptionTest extends ApiTestCase
         $this->seedList($account, $listId, 'Liste');
         $this->begin($account, self::uuid(), self::cipher());
 
-        $this->call('POST', '/v1/lists/'.$listId.'/share', $account, protocol: null);
+        $this->call('POST', '/v1/lists/' . $listId . '/share', $account, protocol: null);
         self::assertSame(426, $this->httpStatus());
         $this->call('GET', '/v1/live', $account, protocol: null);
         self::assertSame(426, $this->httpStatus());
@@ -331,17 +402,19 @@ final class EncryptionTest extends ApiTestCase
 
         // Ein unverschluesseltes Konto kann einer verschluesselten Liste nicht beitreten.
         $plain = self::uuid();
-        $this->call('POST', '/v1/shares/'.$code, $plain, ['wrappedKey' => self::cipher()]);
+        $this->call('POST', '/v1/shares/' . $code, $plain, ['wrappedKey' => self::cipher()]);
         self::assertSame(409, $this->httpStatus());
         self::assertSame('https://spiski.app/problems/encryption-required', $this->problemType());
 
-        $this->call('POST', '/v1/shares/'.$code, $member);
+        $this->call('POST', '/v1/shares/' . $code, $member);
         self::assertSame(400, $this->httpStatus(), 'Ohne wrappedKey kein Beitritt.');
-        $this->call('POST', '/v1/shares/'.$code, $member, ['wrappedKey' => 'kaputt']);
+        $this->call('POST', '/v1/shares/' . $code, $member, ['wrappedKey' => 'kaputt']);
         self::assertSame(400, $this->httpStatus());
 
         $memberKey = self::cipher();
-        self::assertSame(['listId' => $listId], $this->call('POST', '/v1/shares/'.$code, $member, ['wrappedKey' => $memberKey]));
+        self::assertSame(['listId' => $listId], $this->call('POST', '/v1/shares/' . $code, $member, [
+            'wrappedKey' => $memberKey,
+        ]));
 
         $memberView = $this->encSync($member, ['since' => 0, 'clientId' => self::uuid()]);
         $list = self::findRow($memberView, 'lists', $listId);
@@ -358,13 +431,18 @@ final class EncryptionTest extends ApiTestCase
         $pushed = $this->encSync($member, [
             'since' => 0,
             'clientId' => self::uuid(),
-            'changes' => ['items' => [self::encItemRow($memberItem, $listId, '2026-06-01T11:00:00.000Z', self::cipher())]],
+            'changes' => ['items' => [self::encItemRow(
+                $memberItem,
+                $listId,
+                '2026-06-01T11:00:00.000Z',
+                self::cipher(),
+            )]],
         ]);
         self::assertTrue(self::findPushResult($pushed, 'items', $memberItem)['accepted'] ?? false);
 
         // Erneuter Beitritt mit neuem Schluessel ersetzt den alten.
         $newKey = self::cipher();
-        $this->call('POST', '/v1/shares/'.$code, $member, ['wrappedKey' => $newKey]);
+        $this->call('POST', '/v1/shares/' . $code, $member, ['wrappedKey' => $newKey]);
         self::assertSame(200, $this->httpStatus());
         self::assertSame($newKey, $this->connection()->fetchOne('SELECT wrapped_key FROM list_member'));
     }
@@ -376,7 +454,9 @@ final class EncryptionTest extends ApiTestCase
         $this->seedList($owner, $listId, 'Klartext');
         $member = $this->encryptedAccount();
 
-        $this->call('POST', '/v1/shares/'.$this->shareCode($owner, $listId), $member, ['wrappedKey' => self::cipher()]);
+        $this->call('POST', '/v1/shares/' . $this->shareCode($owner, $listId), $member, [
+            'wrappedKey' => self::cipher(),
+        ]);
         self::assertSame(409, $this->httpStatus());
         self::assertSame('https://spiski.app/problems/encryption-required', $this->problemType());
     }
@@ -419,7 +499,12 @@ final class EncryptionTest extends ApiTestCase
         $this->encSync($encrypted, [
             'since' => 0,
             'clientId' => self::uuid(),
-            'changes' => ['lists' => [self::encListRow($encList, '2026-06-01T10:00:00.000Z', self::cipher(), self::cipher())]],
+            'changes' => ['lists' => [self::encListRow(
+                $encList,
+                '2026-06-01T10:00:00.000Z',
+                self::cipher(),
+                self::cipher(),
+            )]],
         ]);
 
         $migrating = self::uuid();
@@ -427,7 +512,9 @@ final class EncryptionTest extends ApiTestCase
         $this->seedList($migrating, $migratingList, 'Halb umgestellt');
         $this->begin($migrating, self::uuid(), self::cipher());
 
-        $counter = (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = :id', ['id' => $plain]);
+        $counter = (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = :id', [
+            'id' => $plain,
+        ]);
 
         // Ohne Frist: nichts.
         self::assertStringContainsString('Keine Frist', $this->runPurge());
@@ -445,17 +532,33 @@ final class EncryptionTest extends ApiTestCase
 
         self::assertSame(
             [$encList, $migratingList],
-            array_map('strval', $this->connection()->fetchFirstColumn('SELECT id FROM shopping_list ORDER BY name = \'\' DESC, id')),
+            array_map(
+                'strval',
+                $this->connection()->fetchFirstColumn('SELECT id FROM shopping_list ORDER BY name = \'\' DESC, id'),
+            ),
             'Nur verschluesselte und gerade umgestellte Konten behalten ihre Listen.',
         );
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM shopping_item'));
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM list_member'));
-        self::assertSame(0, (int) $this->connection()->fetchOne(
-            "SELECT COUNT(*) FROM sync_view WHERE kind IN ('list', 'item') AND user_id IN (:a, :b)",
-            ['a' => $plain, 'b' => $plainMember],
-        ));
-        self::assertSame($counter, (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = :id', ['id' => $plain]), 'Der Zaehler bleibt, sonst folgte fullResync.');
-        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM app_user WHERE id = :id', ['id' => $plain]), 'Das Konto bleibt.');
+        self::assertSame(
+            0,
+            (int) $this->connection()->fetchOne("SELECT COUNT(*) FROM sync_view WHERE kind IN ('list', 'item') AND user_id IN (:a, :b)", [
+                'a' => $plain,
+                'b' => $plainMember,
+            ]),
+        );
+        self::assertSame(
+            $counter,
+            (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = :id', [
+                'id' => $plain,
+            ]),
+            'Der Zaehler bleibt, sonst folgte fullResync.',
+        );
+        self::assertSame(
+            1,
+            (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM app_user WHERE id = :id', ['id' => $plain]),
+            'Das Konto bleibt.',
+        );
     }
 
     public function testAdminShowsEncryptionWithoutContent(): void
@@ -472,7 +575,9 @@ final class EncryptionTest extends ApiTestCase
         ]);
         $this->seedList(self::uuid(), self::uuid(), 'Klartextliste');
 
-        $this->client->request('GET', '/v1/admin/lists?includeItems=1', server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::ADMIN_TOKEN]);
+        $this->client->request('GET', '/v1/admin/lists?includeItems=1', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN,
+        ]);
         self::assertSame(200, $this->httpStatus());
         /** @var array{lists: list<array<string, mixed>>} $page */
         $page = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
@@ -483,9 +588,13 @@ final class EncryptionTest extends ApiTestCase
         self::assertSame('encrypted', $byId[$listId]['encryptionState']);
         self::assertTrue($byId[$listId]['items'][0]['encrypted']);
         self::assertNull($byId[$listId]['items'][0]['name']);
-        self::assertStringNotContainsString('v1.', (string) $this->client->getResponse()->getContent(), 'Kein Chiffretext im Admin-JSON.');
+        self::assertStringNotContainsString(
+            'v1.',
+            (string) $this->client->getResponse()->getContent(),
+            'Kein Chiffretext im Admin-JSON.',
+        );
 
-        $this->client->request('GET', '/admin?open=1', server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::ADMIN_TOKEN]);
+        $this->client->request('GET', '/admin?open=1', server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN]);
         $html = (string) $this->client->getResponse()->getContent();
         self::assertStringContainsString('🔒 verschlüsselt', $html);
         self::assertStringContainsString('Klartextliste', $html);
@@ -510,9 +619,9 @@ final class EncryptionTest extends ApiTestCase
     /** Attrappe eines Chiffretexts im Format `v1.<nonce>.<chiffretext>`. */
     private static function cipher(int $bytes = 40): string
     {
-        $b64 = static fn (string $raw): string => rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+        $b64 = static fn(string $raw): string => rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
 
-        return 'v1.'.$b64(random_bytes(12)).'.'.$b64(random_bytes($bytes));
+        return 'v1.' . $b64(random_bytes(12)) . '.' . $b64(random_bytes($bytes));
     }
 
     /**
@@ -542,14 +651,24 @@ final class EncryptionTest extends ApiTestCase
      *
      * @return array<mixed>
      */
-    private function call(string $method, string $path, string $account, ?array $body = null, ?string $protocol = '2'): array
-    {
-        $server = ['HTTP_AUTHORIZATION' => 'Bearer '.$account, 'CONTENT_TYPE' => 'application/json'];
+    private function call(
+        string $method,
+        string $path,
+        string $account,
+        ?array $body = null,
+        ?string $protocol = '2',
+    ): array {
+        $server = ['HTTP_AUTHORIZATION' => 'Bearer ' . $account, 'CONTENT_TYPE' => 'application/json'];
         if (null !== $protocol) {
             $server['HTTP_X_SPISKI_PROTOCOL'] = $protocol;
         }
 
-        $this->client->request($method, $path, server: $server, content: null === $body ? '' : json_encode($body, \JSON_THROW_ON_ERROR));
+        $this->client->request(
+            $method,
+            $path,
+            server: $server,
+            content: null === $body ? '' : json_encode($body, \JSON_THROW_ON_ERROR),
+        );
 
         $content = (string) $this->client->getResponse()->getContent();
         if ('' === $content) {
@@ -591,7 +710,10 @@ final class EncryptionTest extends ApiTestCase
      */
     private function begin(string $account, string $clientId, string $keyCheck): array
     {
-        $result = $this->call('POST', '/v1/me/encryption/begin', $account, ['clientId' => $clientId, 'keyCheck' => $keyCheck]);
+        $result = $this->call('POST', '/v1/me/encryption/begin', $account, [
+            'clientId' => $clientId,
+            'keyCheck' => $keyCheck,
+        ]);
         self::assertSame(200, $this->httpStatus(), (string) $this->client->getResponse()->getContent());
 
         return $result;
@@ -601,7 +723,10 @@ final class EncryptionTest extends ApiTestCase
     private function encryptedAccount(): string
     {
         $account = self::uuid();
-        $this->call('POST', '/v1/me/encryption/commit', $account, ['clientId' => self::uuid(), 'keyCheck' => self::cipher()]);
+        $this->call('POST', '/v1/me/encryption/commit', $account, [
+            'clientId' => self::uuid(),
+            'keyCheck' => self::cipher(),
+        ]);
         self::assertSame(200, $this->httpStatus());
 
         return $account;
@@ -621,7 +746,7 @@ final class EncryptionTest extends ApiTestCase
 
     private function shareCode(string $owner, string $listId): string
     {
-        $result = $this->call('POST', '/v1/lists/'.$listId.'/share', $owner);
+        $result = $this->call('POST', '/v1/lists/' . $listId . '/share', $owner);
         self::assertSame(200, $this->httpStatus(), (string) $this->client->getResponse()->getContent());
         self::assertIsString($result['code'] ?? null);
 
@@ -630,7 +755,7 @@ final class EncryptionTest extends ApiTestCase
 
     private function join(string $account, string $code): void
     {
-        $this->call('POST', '/v1/shares/'.$code, $account);
+        $this->call('POST', '/v1/shares/' . $code, $account);
         self::assertSame(200, $this->httpStatus(), (string) $this->client->getResponse()->getContent());
     }
 
@@ -676,7 +801,7 @@ final class EncryptionTest extends ApiTestCase
         // Frischer Kernel, damit die Frist aus setDeadline() gilt.
         self::ensureKernelShutdown();
         $this->client = static::createClient();
-        $tester = new CommandTester((new Application($this->client->getKernel()))->find('app:purge-plaintext'));
+        $tester = new CommandTester(new Application($this->client->getKernel())->find('app:purge-plaintext'));
         $tester->execute($dryRun ? ['--dry-run' => true] : []);
         $tester->assertCommandIsSuccessful();
 

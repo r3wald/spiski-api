@@ -54,27 +54,32 @@ final class AdminPageRenderer
         $table = '' === $rows
             ? '<p class="muted">Keine Listen vorhanden.</p>'
             : '<div class="table-wrap"><table>'
-                .'<caption class="visually-hidden">Listen aller Accounts, zuletzt geändert zuerst</caption>'
-                .'<thead><tr><th scope="col">Liste</th><th scope="col">Account</th>'
-                .'<th scope="col">Zugriff</th><th scope="col" class="num">Einträge</th><th scope="col">Geändert (UTC)</th>'
-                .'<th scope="col">Status</th></tr></thead><tbody>'.$rows.'</tbody></table></div>';
+            . '<caption class="visually-hidden">Listen aller Accounts, zuletzt geändert zuerst</caption>'
+            . '<thead><tr><th scope="col">Liste</th><th scope="col">Account</th>'
+            . '<th scope="col">Zugriff</th><th scope="col" class="num">Einträge</th><th scope="col">Geändert (UTC)</th>'
+            . '<th scope="col">Status</th></tr></thead><tbody>'
+            . $rows
+            . '</tbody></table></div>';
 
         $prev = $offset > 0 ? $this->link('Zurück', $filter, $limit, max(0, $offset - $limit)) : '';
-        $next = $offset + $limit < $total ? $this->link('Weiter', $filter, $limit, $offset + $limit) : '';
-        $pager = '' === $prev.$next ? '' : '<nav class="pager" aria-label="Seiten">'.$prev.$next.'</nav>';
+        $next = ($offset + $limit) < $total ? $this->link('Weiter', $filter, $limit, $offset + $limit) : '';
+        $pager = '' === $prev . $next ? '' : '<nav class="pager" aria-label="Seiten">' . $prev . $next . '</nav>';
 
         $banner = null !== $notice && isset(self::NOTICES[$notice])
-            ? '<p class="notice" role="status">'.$this->e(self::NOTICES[$notice]).'</p>'
+            ? '<p class="notice" role="status">' . $this->e(self::NOTICES[$notice]) . '</p>'
             : '';
 
         return $this->shell(
             'spiski Admin',
             $banner
-            .$this->form($filter)
-            .'<p class="muted" aria-live="polite">'.$this->e($summary).'</p>'
-            .$table.$pager
-            .'<p class="muted note">Das Account-Kürzel ist ein gekürzter Hash der Account-UUID. Die UUID selbst ist das '
-            .'Zugangs-Secret der Nutzer und wird hier nie angezeigt. Listennamen, Einträge und Notizen sind Nutzerinhalt.</p>',
+            . $this->form($filter)
+            . '<p class="muted" aria-live="polite">'
+            . $this->e($summary)
+            . '</p>'
+            . $table
+            . $pager
+            . '<p class="muted note">Das Account-Kürzel ist ein gekürzter Hash der Account-UUID. Die UUID selbst ist das '
+            . 'Zugangs-Secret der Nutzer und wird hier nie angezeigt. Listennamen, Einträge und Notizen sind Nutzerinhalt.</p>',
         );
     }
 
@@ -86,45 +91,76 @@ final class AdminPageRenderer
      * @param array{item: array<string, mixed>, list: array<string, mixed>} $data
      * @param string                                                        $return Query-String der Admin-Seite, auf die es danach zurueckgeht
      */
-    public function renderDeleteConfirmation(array $data, string $return, string $token): string
+    public function renderDeleteConfirmation(array $data, string $return, #[\SensitiveParameter] string $token): string
     {
         $item = $data['item'];
         $list = $data['list'];
-        $back = '/admin'.('' === $return ? '' : '?'.$return);
+        $back = '/admin' . ('' === $return ? '' : '?' . $return);
         $users = (int) $list['userCount'];
 
-        $facts = '<dl class="facts">'
-            .'<dt>Eintrag</dt><dd>'.$this->label($item, $this->itemText($item)).$this->itemTags($item).'</dd>'
-            .'<dt>Liste</dt><dd><span class="name">'.$this->dot((int) $list['color']).$this->label($list).'</span>'
-            .(null !== $list['deletedAt'] ? ' <span class="tag danger">Liste gelöscht</span>' : '').'</dd>'
-            .'<dt>Account</dt><dd><code>'.$this->e((string) $list['owner']).'</code></dd>'
-            .'<dt>Betroffen</dt><dd>'.(1 === $users
-                ? '1 Nutzer (nicht geteilt)'
-                : '<strong>'.$users.' Nutzer</strong> – die Liste ist geteilt, der Eintrag verschwindet bei allen').'</dd>'
-            .'</dl>';
+        $facts =
+            '<dl class="facts">'
+            . '<dt>Eintrag</dt><dd>'
+            . $this->label($item, $this->itemText($item))
+            . $this->itemTags($item)
+            . '</dd>'
+            . '<dt>Liste</dt><dd><span class="name">'
+            . $this->dot((int) $list['color'])
+            . $this->label($list)
+            . '</span>'
+            . (null !== $list['deletedAt'] ? ' <span class="tag danger">Liste gelöscht</span>' : '')
+            . '</dd>'
+            . '<dt>Account</dt><dd><code>'
+            . $this->e((string) $list['owner'])
+            . '</code></dd>'
+            . '<dt>Betroffen</dt><dd>'
+            . (
+                1 === $users
+                    ? '1 Nutzer (nicht geteilt)'
+                    : '<strong>'
+                    . $users
+                    . ' Nutzer</strong> – die Liste ist geteilt, der Eintrag verschwindet bei allen'
+            )
+            . '</dd>'
+            . '</dl>';
 
         if (null !== $item['deletedAt']) {
             return $this->shell(
                 'Eintrag löschen – spiski Admin',
-                '<section class="confirm"><h2>Eintrag ist bereits archiviert</h2>'.$facts
-                .'<p class="muted">Archiviert am '.$this->e($this->display((string) $item['deletedAt'])).' (UTC). Es gibt nichts mehr zu löschen.</p>'
-                .'<p><a class="button-link" href="'.$this->e($back).'">Zurück zur Übersicht</a></p></section>',
+                '<section class="confirm"><h2>Eintrag ist bereits archiviert</h2>'
+                . $facts
+                . '<p class="muted">Archiviert am '
+                . $this->e($this->display((string) $item['deletedAt']))
+                . ' (UTC). Es gibt nichts mehr zu löschen.</p>'
+                . '<p><a class="button-link" href="'
+                . $this->e($back)
+                . '">Zurück zur Übersicht</a></p></section>',
             );
         }
 
-        $action = '/admin/items/'.rawurlencode((string) $item['id']).'/delete'.('' === $return ? '' : '?'.$return);
+        $action =
+            '/admin/items/' . rawurlencode((string) $item['id']) . '/delete' . ('' === $return ? '' : '?' . $return);
 
         return $this->shell(
             'Eintrag löschen – spiski Admin',
-            '<section class="confirm"><h2>Diesen Eintrag wirklich löschen?</h2>'.$facts
-            .'<p>Der Eintrag wird auf allen Geräten '.(1 === $users ? 'des Nutzers' : 'aller '.$users.' Nutzer').' entfernt, '
-            .'sobald sie synchronisieren – so, als hätte ihn jemand in der App gelöscht. Auf dem Server bleibt er als '
-            .'archivierter Eintrag erhalten.</p>'
-            .'<form method="post" action="'.$this->e($action).'" class="actions">'
-            .'<input type="hidden" name="confirm" value="'.$this->e($token).'">'
-            .'<button type="submit" class="danger">Ja, Eintrag löschen</button>'
-            .'<a class="button-link" href="'.$this->e($back).'">Abbrechen</a>'
-            .'</form></section>',
+            '<section class="confirm"><h2>Diesen Eintrag wirklich löschen?</h2>'
+            . $facts
+            . '<p>Der Eintrag wird auf allen Geräten '
+            . (1 === $users ? 'des Nutzers' : 'aller ' . $users . ' Nutzer')
+            . ' entfernt, '
+            . 'sobald sie synchronisieren – so, als hätte ihn jemand in der App gelöscht. Auf dem Server bleibt er als '
+            . 'archivierter Eintrag erhalten.</p>'
+            . '<form method="post" action="'
+            . $this->e($action)
+            . '" class="actions">'
+            . '<input type="hidden" name="confirm" value="'
+            . $this->e($token)
+            . '">'
+            . '<button type="submit" class="danger">Ja, Eintrag löschen</button>'
+            . '<a class="button-link" href="'
+            . $this->e($back)
+            . '">Abbrechen</a>'
+            . '</form></section>',
         );
     }
 
@@ -135,48 +171,93 @@ final class AdminPageRenderer
      * @param array<string, mixed> $list
      * @param string               $return Query-String der Admin-Seite, auf die es danach zurueckgeht
      */
-    public function renderListDeleteConfirmation(array $list, string $return, string $token): string
-    {
-        $back = '/admin'.('' === $return ? '' : '?'.$return);
+    public function renderListDeleteConfirmation(
+        array $list,
+        string $return,
+        #[\SensitiveParameter]
+        string $token,
+    ): string {
+        $back = '/admin' . ('' === $return ? '' : '?' . $return);
         $users = (int) $list['userCount'];
         $members = (int) $list['memberCount'];
         $active = (int) $list['activeItemCount'];
         $archived = (int) $list['itemCount'] - $active;
 
-        $facts = '<dl class="facts">'
-            .'<dt>Liste</dt><dd><span class="name">'.$this->dot((int) $list['color']).$this->label($list).'</span></dd>'
-            .'<dt>Account</dt><dd><code>'.$this->e((string) $list['owner']).'</code></dd>'
-            .'<dt>Einträge</dt><dd>'.$active.' aktiv'.($archived > 0 ? ' <span class="muted-inline">(+ '.$archived.' archiviert)</span>' : '').'</dd>'
-            .'<dt>Geändert</dt><dd>'.$this->e($this->display((string) $list['updatedAt'])).' UTC</dd>'
-            .'<dt>Betroffen</dt><dd>'.(0 === $members
-                ? '1 Nutzer (nicht geteilt)'
-                : '<strong>'.$users.' Nutzer</strong> – Besitzer + '.$members.(1 === $members ? ' Mitglied' : ' Mitglieder').', die Liste verschwindet bei allen').'</dd>'
-            .'</dl>';
+        $facts =
+            '<dl class="facts">'
+            . '<dt>Liste</dt><dd><span class="name">'
+            . $this->dot((int) $list['color'])
+            . $this->label($list)
+            . '</span></dd>'
+            . '<dt>Account</dt><dd><code>'
+            . $this->e((string) $list['owner'])
+            . '</code></dd>'
+            . '<dt>Einträge</dt><dd>'
+            . $active
+            . ' aktiv'
+            . ($archived > 0 ? ' <span class="muted-inline">(+ ' . $archived . ' archiviert)</span>' : '')
+            . '</dd>'
+            . '<dt>Geändert</dt><dd>'
+            . $this->e($this->display((string) $list['updatedAt']))
+            . ' UTC</dd>'
+            . '<dt>Betroffen</dt><dd>'
+            . (
+                0 === $members
+                    ? '1 Nutzer (nicht geteilt)'
+                    : '<strong>'
+                    . $users
+                    . ' Nutzer</strong> – Besitzer + '
+                    . $members
+                    . (1 === $members ? ' Mitglied' : ' Mitglieder')
+                    . ', die Liste verschwindet bei allen'
+            )
+            . '</dd>'
+            . '</dl>';
 
         if (null !== $list['deletedAt']) {
             return $this->shell(
                 'Liste löschen – spiski Admin',
-                '<section class="confirm"><h2>Liste ist bereits gelöscht</h2>'.$facts
-                .'<p class="muted">Gelöscht am '.$this->e($this->display((string) $list['deletedAt'])).' (UTC). Es gibt nichts mehr zu löschen.</p>'
-                .'<p><a class="button-link" href="'.$this->e($back).'">Zurück zur Übersicht</a></p></section>',
+                '<section class="confirm"><h2>Liste ist bereits gelöscht</h2>'
+                . $facts
+                . '<p class="muted">Gelöscht am '
+                . $this->e($this->display((string) $list['deletedAt']))
+                . ' (UTC). Es gibt nichts mehr zu löschen.</p>'
+                . '<p><a class="button-link" href="'
+                . $this->e($back)
+                . '">Zurück zur Übersicht</a></p></section>',
             );
         }
 
-        $action = '/admin/lists/'.rawurlencode((string) $list['id']).'/delete'.('' === $return ? '' : '?'.$return);
+        $action =
+            '/admin/lists/' . rawurlencode((string) $list['id']) . '/delete' . ('' === $return ? '' : '?' . $return);
 
         return $this->shell(
             'Liste löschen – spiski Admin',
-            '<section class="confirm"><h2>Diese Liste wirklich löschen?</h2>'.$facts
-            .'<p>Die Liste verschwindet samt '.(1 === $active ? 'ihrem Eintrag' : 'ihren '.$active.' Einträgen').' auf allen Geräten '
-            .(1 === $users ? 'des Nutzers' : 'aller '.$users.' Nutzer').', sobald sie synchronisieren – so, als hätte der Besitzer sie in der App gelöscht. '
-            .'Der Besitzer findet sie danach im Archiv der App und kann sie dort wiederherstellen.'
-            .(0 === $members ? '' : ' Das Teilen bleibt bestehen; nach einer Wiederherstellung sehen die Mitglieder sie wieder.')
-            .'</p>'
-            .'<form method="post" action="'.$this->e($action).'" class="actions">'
-            .'<input type="hidden" name="confirm" value="'.$this->e($token).'">'
-            .'<button type="submit" class="danger">Ja, Liste löschen</button>'
-            .'<a class="button-link" href="'.$this->e($back).'">Abbrechen</a>'
-            .'</form></section>',
+            '<section class="confirm"><h2>Diese Liste wirklich löschen?</h2>'
+            . $facts
+            . '<p>Die Liste verschwindet samt '
+            . (1 === $active ? 'ihrem Eintrag' : 'ihren ' . $active . ' Einträgen')
+            . ' auf allen Geräten '
+            . (1 === $users ? 'des Nutzers' : 'aller ' . $users . ' Nutzer')
+            . ', sobald sie synchronisieren – so, als hätte der Besitzer sie in der App gelöscht. '
+            . 'Der Besitzer findet sie danach im Archiv der App und kann sie dort wiederherstellen.'
+            . (
+                0 === $members
+                    ? ''
+                    : ' Das Teilen bleibt bestehen; nach einer Wiederherstellung sehen die Mitglieder sie wieder.'
+            )
+            . '</p>'
+            . '<form method="post" action="'
+            . $this->e($action)
+            . '" class="actions">'
+            . '<input type="hidden" name="confirm" value="'
+            . $this->e($token)
+            . '">'
+            . '<button type="submit" class="danger">Ja, Liste löschen</button>'
+            . '<a class="button-link" href="'
+            . $this->e($back)
+            . '">Abbrechen</a>'
+            . '</form></section>',
         );
     }
 
@@ -187,8 +268,16 @@ final class AdminPageRenderer
     {
         $name = true === $list['encrypted'] ? 'verschlüsselte Liste' : (string) $list['name'];
 
-        return '<a class="delete list-delete" href="/admin/lists/'.rawurlencode((string) $list['id']).'/delete?'.$this->e($return).'">'
-            .'Löschen<span class="visually-hidden">: '.$this->e($name).'</span></a>';
+        return (
+            '<a class="delete list-delete" href="/admin/lists/'
+            . rawurlencode((string) $list['id'])
+            . '/delete?'
+            . $this->e($return)
+            . '">'
+            . 'Löschen<span class="visually-hidden">: '
+            . $this->e($name)
+            . '</span></a>'
+        );
     }
 
     /**
@@ -216,31 +305,51 @@ final class AdminPageRenderer
 
     private function shell(string $title, string $body): string
     {
-        return '<!doctype html>'
-            .'<html lang="de"><head><meta charset="utf-8">'
-            .'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            .'<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="light dark">'
-            .'<title>'.$this->e($title).'</title><style>'.self::CSS.'</style></head><body>'
-            .'<header class="bar"><h1><a href="/admin">spiski Admin</a></h1></header><main>'
-            .$body
-            .'</main></body></html>';
+        return (
+            '<!doctype html>'
+            . '<html lang="de"><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="light dark">'
+            . '<title>'
+            . $this->e($title)
+            . '</title><style>'
+            . self::CSS
+            . '</style></head><body>'
+            . '<header class="bar"><h1><a href="/admin">spiski Admin</a></h1></header><main>'
+            . $body
+            . '</main></body></html>'
+        );
     }
 
     private function form(AdminPageFilter $filter): string
     {
-        return '<form method="get" action="/admin" class="toolbar">'
-            .'<label class="grow"><span class="visually-hidden">Filtern</span>'
-            .'<input type="search" name="q" value="'.$this->e($filter->query).'" maxlength="'.AdminPageLimits::MAX_QUERY_LENGTH.'" '
-            .'placeholder="Nach Listenname oder Account-Kürzel filtern" autocomplete="off"></label>'
-            .$this->checkbox('hideDeleted', 'Gelöschte Listen ausblenden', $filter->hideDeletedLists)
-            .$this->checkbox('archivedItems', 'Archivierte Einträge anzeigen', $filter->showArchivedItems)
-            .$this->checkbox('open', 'Einträge aufgeklappt', $filter->expandItems)
-            .'<button type="submit">Anwenden</button></form>';
+        return (
+            '<form method="get" action="/admin" class="toolbar">'
+            . '<label class="grow"><span class="visually-hidden">Filtern</span>'
+            . '<input type="search" name="q" value="'
+            . $this->e($filter->query)
+            . '" maxlength="'
+            . AdminPageLimits::MAX_QUERY_LENGTH
+            . '" '
+            . 'placeholder="Nach Listenname oder Account-Kürzel filtern" autocomplete="off"></label>'
+            . $this->checkbox('hideDeleted', 'Gelöschte Listen ausblenden', $filter->hideDeletedLists)
+            . $this->checkbox('archivedItems', 'Archivierte Einträge anzeigen', $filter->showArchivedItems)
+            . $this->checkbox('open', 'Einträge aufgeklappt', $filter->expandItems)
+            . '<button type="submit">Anwenden</button></form>'
+        );
     }
 
     private function checkbox(string $name, string $label, bool $checked): string
     {
-        return '<label class="check"><input type="checkbox" name="'.$name.'" value="1"'.($checked ? ' checked' : '').'> '.$this->e($label).'</label>';
+        return (
+            '<label class="check"><input type="checkbox" name="'
+            . $name
+            . '" value="1"'
+            . ($checked ? ' checked' : '')
+            . '> '
+            . $this->e($label)
+            . '</label>'
+        );
     }
 
     /**
@@ -252,18 +361,44 @@ final class AdminPageRenderer
     {
         $itemsRow = $this->itemsRow($list, $filter, $return);
         $deleted = null !== $list['deletedAt'];
-        $classes = trim(($deleted ? 'deleted' : '').('' !== $itemsRow ? ' has-items' : ''));
+        $classes = trim(($deleted ? 'deleted' : '') . ('' !== $itemsRow ? ' has-items' : ''));
         $active = (int) $list['activeItemCount'];
         $total = (int) $list['itemCount'];
 
-        return '<tr'.('' === $classes ? '' : ' class="'.$classes.'"').'>'
-            .'<td><div class="name">'.$this->dot((int) $list['color']).$this->label($list).'</div></td>'
-            .'<td><code>'.$this->e((string) $list['owner']).'</code>'.$this->encryptionState((string) $list['encryptionState']).'</td>'
-            .'<td>'.$this->access($list).'</td>'
-            .'<td class="num">'.$active.' / '.$total.'</td>'
-            .'<td><time datetime="'.$this->e((string) $list['updatedAt']).'">'.$this->e($this->display((string) $list['updatedAt'])).'</time></td>'
-            .'<td class="status'.($deleted ? ' deleted' : '').'">'.($deleted ? 'gelöscht' : 'aktiv'.$this->deleteListLink($list, $return)).'</td>'
-            .'</tr>'.$itemsRow;
+        return (
+            '<tr'
+            . ('' === $classes ? '' : ' class="' . $classes . '"')
+            . '>'
+            . '<td><div class="name">'
+            . $this->dot((int) $list['color'])
+            . $this->label($list)
+            . '</div></td>'
+            . '<td><code>'
+            . $this->e((string) $list['owner'])
+            . '</code>'
+            . $this->encryptionState((string) $list['encryptionState'])
+            . '</td>'
+            . '<td>'
+            . $this->access($list)
+            . '</td>'
+            . '<td class="num">'
+            . $active
+            . ' / '
+            . $total
+            . '</td>'
+            . '<td><time datetime="'
+            . $this->e((string) $list['updatedAt'])
+            . '">'
+            . $this->e($this->display((string) $list['updatedAt']))
+            . '</time></td>'
+            . '<td class="status'
+            . ($deleted ? ' deleted' : '')
+            . '">'
+            . ($deleted ? 'gelöscht' : 'aktiv' . $this->deleteListLink($list, $return))
+            . '</td>'
+            . '</tr>'
+            . $itemsRow
+        );
     }
 
     /**
@@ -277,7 +412,7 @@ final class AdminPageRenderer
             return '<span class="label encrypted">🔒 verschlüsselt</span>';
         }
 
-        return '<span class="label">'.$this->e('' === $plain ? (string) $row['name'] : $plain).'</span>';
+        return '<span class="label">' . $this->e('' === $plain ? (string) $row['name'] : $plain) . '</span>';
     }
 
     /** Zustand des Kontos bei der Umstellung auf Verschluesselung (CLAUDE.md 14). */
@@ -302,8 +437,16 @@ final class AdminPageRenderer
         $codeActive = true === $list['shareCodeActive'];
 
         if ($members > 0) {
-            return '<span class="tag shared">geteilt</span> <strong>'.(int) $list['userCount'].' Nutzer</strong>'
-                .'<span class="sub">Besitzer + '.$members.(1 === $members ? ' Mitglied' : ' Mitglieder').($codeActive ? ' · Code aktiv' : '').'</span>';
+            return (
+                '<span class="tag shared">geteilt</span> <strong>'
+                . (int) $list['userCount']
+                . ' Nutzer</strong>'
+                . '<span class="sub">Besitzer + '
+                . $members
+                . (1 === $members ? ' Mitglied' : ' Mitglieder')
+                . ($codeActive ? ' · Code aktiv' : '')
+                . '</span>'
+            );
         }
 
         return $codeActive
@@ -329,7 +472,13 @@ final class AdminPageRenderer
         /** @var list<array<string, mixed>> $items */
         $items = $list['items'] ?? [];
         if ([] === $items) {
-            return '<tr class="items"><td colspan="'.self::COLUMNS.'"><p class="muted">Keine aktiven Einträge'.$this->e($hint).'</p></td></tr>';
+            return (
+                '<tr class="items"><td colspan="'
+                . self::COLUMNS
+                . '"><p class="muted">Keine aktiven Einträge'
+                . $this->e($hint)
+                . '</p></td></tr>'
+            );
         }
 
         $count = \count($items);
@@ -340,8 +489,18 @@ final class AdminPageRenderer
             $lis .= $this->item($item, $return);
         }
 
-        return '<tr class="items"><td colspan="'.self::COLUMNS.'"><details'.($filter->expandItems ? ' open' : '').'>'
-            .'<summary>'.$this->e($summary).'</summary><ul class="items">'.$lis.'</ul></details></td></tr>';
+        return (
+            '<tr class="items"><td colspan="'
+            . self::COLUMNS
+            . '"><details'
+            . ($filter->expandItems ? ' open' : '')
+            . '>'
+            . '<summary>'
+            . $this->e($summary)
+            . '</summary><ul class="items">'
+            . $lis
+            . '</ul></details></td></tr>'
+        );
     }
 
     /**
@@ -355,20 +514,37 @@ final class AdminPageRenderer
 
         $note = '' === (string) ($item['note'] ?? '')
             ? ''
-            : '<span class="note-text">Notiz: '.$this->e((string) $item['note']).'</span>';
+            : '<span class="note-text">Notiz: ' . $this->e((string) $item['note']) . '</span>';
 
         // Archivierte Eintraege sind schon geloescht; dort gibt es nichts mehr zu tun.
         $delete = $archived
             ? ''
-            : '<a class="delete" href="/admin/items/'.rawurlencode((string) $item['id']).'/delete?'.$this->e($return).'">'
-                .'Löschen<span class="visually-hidden">: '.$this->e(true === $item['encrypted'] ? 'verschlüsselter Eintrag' : $text).'</span></a>';
+            : '<a class="delete" href="/admin/items/'
+            . rawurlencode((string) $item['id'])
+            . '/delete?'
+            . $this->e($return)
+            . '">'
+            . 'Löschen<span class="visually-hidden">: '
+            . $this->e(true === $item['encrypted'] ? 'verschlüsselter Eintrag' : $text)
+            . '</span></a>';
 
-        return '<li class="item'.($archived ? ' archived' : '').($checked ? ' done' : '').'">'
-            .'<span class="box" aria-hidden="true">'.($checked ? '☑' : '☐').'</span>'
-            .'<span class="visually-hidden">'.($checked ? 'erledigt: ' : 'offen: ').'</span>'
-            .$this->label($item, $text)
-            .$this->itemTags($item).$delete.$note
-            .'</li>';
+        return (
+            '<li class="item'
+            . ($archived ? ' archived' : '')
+            . ($checked ? ' done' : '')
+            . '">'
+            . '<span class="box" aria-hidden="true">'
+            . ($checked ? '☑' : '☐')
+            . '</span>'
+            . '<span class="visually-hidden">'
+            . ($checked ? 'erledigt: ' : 'offen: ')
+            . '</span>'
+            . $this->label($item, $text)
+            . $this->itemTags($item)
+            . $delete
+            . $note
+            . '</li>'
+        );
     }
 
     /**
@@ -380,7 +556,7 @@ final class AdminPageRenderer
     {
         return implode(' ', array_filter(
             [$this->quantity($item['quantity']), (string) ($item['unit'] ?? ''), (string) ($item['name'] ?? '')],
-            static fn (string $part): bool => '' !== $part,
+            static fn(string $part): bool => '' !== $part,
         ));
     }
 
@@ -394,7 +570,10 @@ final class AdminPageRenderer
             $tags .= '<span class="tag">erledigt</span>';
         }
         if (null !== $item['deletedAt']) {
-            $tags .= '<span class="tag danger">archiviert '.$this->e($this->display((string) $item['deletedAt'])).'</span>';
+            $tags .=
+                '<span class="tag danger">archiviert '
+                . $this->e($this->display((string) $item['deletedAt']))
+                . '</span>';
         }
         if (null !== $item['movedAt']) {
             $tags .= '<span class="tag">verschoben</span>';
@@ -435,12 +614,14 @@ final class AdminPageRenderer
 
     private function link(string $label, AdminPageFilter $filter, int $limit, int $offset): string
     {
-        return '<a href="/admin?'.$this->e($this->pageQuery($filter, $limit, $offset)).'">'.$this->e($label).'</a>';
+        return (
+            '<a href="/admin?' . $this->e($this->pageQuery($filter, $limit, $offset)) . '">' . $this->e($label) . '</a>'
+        );
     }
 
     private function display(string $isoTimestamp): string
     {
-        return (new \DateTimeImmutable($isoTimestamp))->format('Y-m-d H:i:s');
+        return new \DateTimeImmutable($isoTimestamp)->format('Y-m-d H:i:s');
     }
 
     private function e(string $value): string

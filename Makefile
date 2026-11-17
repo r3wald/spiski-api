@@ -22,7 +22,7 @@ PROD    := $(call server,prod,$(PROD_PORT))
 STAGING := $(call server,staging,$(STAGING_PORT))
 
 .DEFAULT_GOAL := help
-.PHONY: help build up down logs shell install migrate diff test stan openapi openapi-check check backup \
+.PHONY: help build up down logs shell install migrate diff test stan lint analyze fmt fmt-check mago mago-baseline-prune openapi openapi-check check backup \
 	prod-build prod-up prod-down prod-restart prod-logs prod-migrate prod-backup \
 	staging-build staging-up staging-down staging-restart staging-logs staging-migrate staging-backup
 
@@ -59,6 +59,28 @@ test: ## Testsuite gegen PostgreSQL
 stan: ## Statische Analyse (Level 6)
 	$(IN_PHP) vendor/bin/phpstan analyse --memory-limit=512M --no-progress
 
+# Mago (mago.toml): Neue Befunde ab Stufe "warning" schlagen fehl, der Bestand steht in
+# den Baselines mago-lint-baseline.toml und mago-analysis-baseline.toml.
+MAGO_FAIL := --minimum-fail-level=warning
+
+lint: ## Mago-Linter
+	$(IN_PHP) mago lint $(MAGO_FAIL)
+
+analyze: ## Mago-Analyse
+	$(IN_PHP) mago analyze $(MAGO_FAIL)
+
+fmt: ## Code mit Mago formatieren
+	$(IN_PHP) mago format
+
+fmt-check: ## Pruefen, ob der Code formatiert ist
+	$(IN_PHP) mago format --check
+
+mago: fmt-check lint analyze ## Alle Mago-Pruefungen
+
+mago-baseline-prune: ## Behobene Befunde aus den Mago-Baselines entfernen
+	$(IN_PHP) mago lint --remove-outdated-baseline-entries
+	$(IN_PHP) mago analyze --remove-outdated-baseline-entries
+
 # Die Ausgabe wird im Container in die Datei geschrieben, nicht per Umleitung auf dem
 # Host: `docker compose exec` haengt sonst ein TTY an, und die Datei bekaeme \r\n.
 # var/ liegt im Bind-Mount und ist innen wie aussen derselbe Pfad.
@@ -71,7 +93,7 @@ openapi-check: ## Pruefen, ob openapi.yaml zum Code passt
 		&& echo "openapi.yaml ist aktuell." \
 		|| (echo "openapi.yaml weicht vom Code ab – 'make openapi' ausfuehren."; exit 1)
 
-check: stan test openapi-check ## Alles, was auch die CI prueft
+check: mago stan test openapi-check ## Alles, was auch die CI prueft
 
 backup: ## Dump der Entwicklungsdatenbank nach ./backups
 	BACKUP_MODE=docker COMPOSE_SERVICE=postgres ./bin/backup.sh

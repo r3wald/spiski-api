@@ -29,60 +29,133 @@ final class StatusPageRenderer
         $db = $status['database'];
         $migrations = $status['migrations'];
 
-        $apiRows = $this->row('Version', '<code>'.$this->e($api['version']).'</code>')
-            .$this->row('Revision', null === $api['revision'] ? $this->unknown() : '<code>'.$this->e($api['revision']).'</code>')
-            .$this->row('Deployt (UTC)', null === $api['deployedAt'] ? $this->unknown() : $this->time($api['deployedAt']));
+        $apiRows =
+            $this->row('Version', '<code>' . $this->e($api['version']) . '</code>')
+            . $this->row(
+                'Revision',
+                null === $api['revision'] ? $this->unknown() : '<code>' . $this->e($api['revision']) . '</code>',
+            )
+            . $this->row(
+                'Deployt (UTC)',
+                null === $api['deployedAt'] ? $this->unknown() : $this->time($api['deployedAt']),
+            );
 
-        $dbRows = $this->row('Datenbank', $this->badge('up' === $db['status'] ? 'ok' : 'down', 'up' === $db['status'] ? 'erreichbar' : 'nicht erreichbar'))
-            .(null === $db['latencyMs'] ? '' : $this->row('Antwortzeit', $this->e(number_format($db['latencyMs'], 1, ',', '.')).' ms'))
-            .$this->row('Schema', match ($migrations['status']) {
+        $dbRows =
+            $this->row('Datenbank', $this->badge(
+                'up' === $db['status'] ? 'ok' : 'down',
+                'up' === $db['status'] ? 'erreichbar' : 'nicht erreichbar',
+            ))
+            . (
+                null === $db['latencyMs']
+                    ? ''
+                    : $this->row('Antwortzeit', $this->e(number_format($db['latencyMs'], 1, ',', '.')) . ' ms')
+            )
+            . $this->row('Schema', match ($migrations['status']) {
                 'current' => $this->badge('ok', 'aktuell'),
-                'pending' => $this->badge('degraded', \sprintf('%d %s ausstehend', $migrations['pending'] ?? 0, 1 === $migrations['pending'] ? 'Migration' : 'Migrationen')),
+                'pending' => $this->badge('degraded', \sprintf(
+                    '%d %s ausstehend',
+                    $migrations['pending'] ?? 0,
+                    1 === $migrations['pending'] ? 'Migration' : 'Migrationen',
+                )),
                 'unknown' => $this->badge('down', 'unbekannt'),
             })
-            .(null === $migrations['current'] ? '' : $this->row('Letzte Migration', '<code>'.$this->e($migrations['current']).'</code>'));
+            . (
+                null === $migrations['current']
+                    ? ''
+                    : $this->row('Letzte Migration', '<code>' . $this->e($migrations['current']) . '</code>')
+            );
 
         $stats = $status['statistics'];
         $usage = null === $stats
             ? '<p class="muted">Nicht verfügbar, solange die Datenbank nicht erreichbar ist.</p>'
             : '<dl>'
-                .$this->row('Konten', $this->n($stats['accounts']['total']))
-                .$this->row('aktiv in 24 h / 7 Tagen / 30 Tagen', $this->n($stats['accounts']['active24h']).' / '.$this->n($stats['accounts']['active7d']).' / '.$this->n($stats['accounts']['active30d']))
-                .$this->row('Listen', $this->n($stats['lists']['active']).' <span class="muted">(+ '.$this->n($stats['lists']['deleted']).' gelöscht)</span>')
-                .$this->row('davon geteilt', $this->n($stats['lists']['shared']).' <span class="muted">('.$this->n($stats['memberships']).' Mitgliedschaften)</span>')
-                .$this->row('Einträge', $this->n($stats['items']['active']).' <span class="muted">(+ '.$this->n($stats['items']['archived']).' archiviert)</span>')
-                .$this->row('Konten verschlüsselt', $this->n($stats['encryption']['encrypted']).' <span class="muted">('.$this->n($stats['encryption']['migrating']).' in Umstellung, '.$this->n($stats['encryption']['plaintext']).' unverschlüsselt)</span>')
-                .'</dl>';
+            . $this->row('Konten', $this->n($stats['accounts']['total']))
+            . $this->row(
+                'aktiv in 24 h / 7 Tagen / 30 Tagen',
+                $this->n($stats['accounts']['active24h']) . ' / ' . $this->n($stats['accounts']['active7d']) . ' / '
+                    . $this->n($stats['accounts']['active30d']),
+            )
+            . $this->row(
+                'Listen',
+                $this->n($stats['lists']['active'])
+                . ' <span class="muted">(+ '
+                . $this->n($stats['lists']['deleted'])
+                . ' gelöscht)</span>',
+            )
+            . $this->row(
+                'davon geteilt',
+                $this->n($stats['lists']['shared'])
+                . ' <span class="muted">('
+                . $this->n($stats['memberships'])
+                . ' Mitgliedschaften)</span>',
+            )
+            . $this->row(
+                'Einträge',
+                $this->n($stats['items']['active'])
+                . ' <span class="muted">(+ '
+                . $this->n($stats['items']['archived'])
+                . ' archiviert)</span>',
+            )
+            . $this->row(
+                'Konten verschlüsselt',
+                $this->n($stats['encryption']['encrypted'])
+                . ' <span class="muted">('
+                . $this->n($stats['encryption']['migrating'])
+                . ' in Umstellung, '
+                . $this->n($stats['encryption']['plaintext'])
+                . ' unverschlüsselt)</span>',
+            )
+            . '</dl>';
 
-        return '<!doctype html>'
-            .'<html lang="de"><head><meta charset="utf-8">'
-            .'<meta name="viewport" content="width=device-width, initial-scale=1">'
-            .'<meta http-equiv="refresh" content="'.self::REFRESH_SECONDS.'">'
-            .'<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="light dark">'
-            .'<title>spiski Status</title><style>'.self::CSS.'</style></head><body>'
-            .'<header class="bar"><h1>spiski Status</h1></header><main>'
-            .'<section class="hero '.$status['status'].'" aria-live="polite">'
-            .'<span class="light" aria-hidden="true"></span>'
-            .'<div><p class="state">'.$this->e(self::LABELS[$status['status']]).'</p>'
-            .'<p class="muted">Stand '.$this->time($status['checkedAt']).' UTC</p></div></section>'
-            .'<div class="grid">'
-            .'<section class="card"><h2>API</h2><dl>'.$apiRows.'</dl></section>'
-            .'<section class="card"><h2>Betrieb</h2><dl>'.$dbRows.'</dl></section>'
-            .'<section class="card wide"><h2>Nutzung</h2>'.$usage.'</section>'
-            .'</div>'
-            .'<p class="muted note">Aktualisiert sich alle '.self::REFRESH_SECONDS.' Sekunden. '
-            .'Maschinenlesbar: <a href="/status.json">/status.json</a></p>'
-            .'</main></body></html>';
+        return (
+            '<!doctype html>'
+            . '<html lang="de"><head><meta charset="utf-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta http-equiv="refresh" content="'
+            . self::REFRESH_SECONDS
+            . '">'
+            . '<meta name="robots" content="noindex, nofollow"><meta name="color-scheme" content="light dark">'
+            . '<title>spiski Status</title><style>'
+            . self::CSS
+            . '</style></head><body>'
+            . '<header class="bar"><h1>spiski Status</h1></header><main>'
+            . '<section class="hero '
+            . $status['status']
+            . '" aria-live="polite">'
+            . '<span class="light" aria-hidden="true"></span>'
+            . '<div><p class="state">'
+            . $this->e(self::LABELS[$status['status']])
+            . '</p>'
+            . '<p class="muted">Stand '
+            . $this->time($status['checkedAt'])
+            . ' UTC</p></div></section>'
+            . '<div class="grid">'
+            . '<section class="card"><h2>API</h2><dl>'
+            . $apiRows
+            . '</dl></section>'
+            . '<section class="card"><h2>Betrieb</h2><dl>'
+            . $dbRows
+            . '</dl></section>'
+            . '<section class="card wide"><h2>Nutzung</h2>'
+            . $usage
+            . '</section>'
+            . '</div>'
+            . '<p class="muted note">Aktualisiert sich alle '
+            . self::REFRESH_SECONDS
+            . ' Sekunden. '
+            . 'Maschinenlesbar: <a href="/status.json">/status.json</a></p>'
+            . '</main></body></html>'
+        );
     }
 
     private function row(string $label, string $valueHtml): string
     {
-        return '<div class="row"><dt>'.$this->e($label).'</dt><dd>'.$valueHtml.'</dd></div>';
+        return '<div class="row"><dt>' . $this->e($label) . '</dt><dd>' . $valueHtml . '</dd></div>';
     }
 
     private function badge(string $kind, string $label): string
     {
-        return '<span class="badge '.$kind.'">'.$this->e($label).'</span>';
+        return '<span class="badge ' . $kind . '">' . $this->e($label) . '</span>';
     }
 
     private function unknown(): string
@@ -92,9 +165,13 @@ final class StatusPageRenderer
 
     private function time(string $iso): string
     {
-        return '<time datetime="'.$this->e($iso).'">'
-            .$this->e((new \DateTimeImmutable($iso))->format('Y-m-d H:i:s'))
-            .'</time>';
+        return (
+            '<time datetime="'
+            . $this->e($iso)
+            . '">'
+            . $this->e(new \DateTimeImmutable($iso)->format('Y-m-d H:i:s'))
+            . '</time>'
+        );
     }
 
     private function n(int $value): string

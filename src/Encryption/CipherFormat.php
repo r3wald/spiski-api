@@ -12,9 +12,7 @@ use App\Sync\SyncLimits;
  */
 final class CipherFormat
 {
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 
     /** `enc` einer Zeile: Name bzw. Name, Menge, Einheit, Notiz. */
     public static function isEnc(mixed $value): bool
@@ -30,8 +28,6 @@ final class CipherFormat
 
     private static function matches(mixed $value, int $maxLength): bool
     {
-        return \is_string($value)
-            && \strlen($value) <= $maxLength
-            && 1 === preg_match(SyncLimits::ENC_PATTERN, $value);
+        return \is_string($value) && \strlen($value) <= $maxLength && 1 === preg_match(SyncLimits::ENC_PATTERN, $value);
     }
 }

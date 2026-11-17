@@ -45,13 +45,26 @@ curl -s -X POST localhost:8081/v1/sync \
 | `make diff` | Migration aus geänderten Entities erzeugen |
 | `make test` | Testsuite gegen PostgreSQL |
 | `make stan` | PHPStan Level 6 |
+| `make lint` / `make analyze` | Mago-Linter / Mago-Analyse |
+| `make fmt` / `make fmt-check` | Code mit Mago formatieren / prüfen, ob er formatiert ist |
+| `make mago` | Alle Mago-Prüfungen (Format, Lint, Analyse) |
 | `make openapi` | `openapi.yaml` neu erzeugen |
-| `make check` | Analyse + Tests + OpenAPI-Diff (wie die CI) |
+| `make check` | Mago + PHPStan + Tests + OpenAPI-Diff (wie die CI) |
 | `make backup` | Dump der Entwicklungsdatenbank nach `./backups` |
 | `make prod-up` / `prod-migrate` / `prod-backup` | Produktions-Stack, siehe Abschnitt „Server" |
 | `make staging-up` / `staging-migrate` / `staging-backup` | Staging-Stack, dasselbe für Staging |
 
-`make help` listet alles auf.
+`make help` listet alles auf. Die PHP-Targets laufen mit `docker compose exec` im laufenden `php`-Container (vorher `make up`), im Container selbst oder in GitLab CI direkt.
+
+### Mago
+
+[Mago](https://mago.carthage.software/) prüft den Code zusätzlich zu PHPStan: Formatierung (`mago format`), Lint-Regeln (`mago lint`, mit den Integrationen Symfony, PHPUnit und Doctrine) und eine eigene statische Analyse (`mago analyze`). Konfiguration in `mago.toml`; installiert als Composer-Dev-Abhängigkeit `carthage-software/mago` (der Wrapper `vendor/bin/mago` lädt die passende Binärdatei beim ersten Aufruf).
+
+- **Formatierung ist verbindlich:** `make fmt` vor dem Commit, `make fmt-check` (und die CI) schlägt sonst fehl.
+- **Schranke:** Jeder neue Befund ab Stufe *warning* lässt `make check` und die CI scheitern; reine Hinweise (*help*, *note*) nicht.
+- **Baselines:** Der Bestand bei der Einführung steht in `mago-lint-baseline.toml` (vor allem Komplexitätsmetriken wie `too-many-methods`, `cyclomatic-complexity`) und `mago-analysis-baseline.toml` (gemischte Typen aus `json_decode` im Request-Parser und in den Tests, veraltete swagger-php-Attribute). Wer einen davon behebt, räumt mit `make mago-baseline-prune` auf. Eine Baseline nicht einfach neu erzeugen (`--generate-baseline`): Das würde auch neue Befunde verstecken.
+- **Angepasste Regeln:** `assertion-style` erwartet `self::assertX()` (Projektkonvention), `literal-named-argument` ist aus, `no-literal-password` gilt nicht für Tests (feste Test-Tokens).
+- **Offen:** `OA\JsonContent` und `OA\Schema` sind seit swagger-php 7 veraltet (Ersatz `OpenApi\Spec\MediaType\Json` bzw. `OpenApi\Spec\Schema`, entfernt in 8.0). Die 47 Fundstellen in den Controllern stehen in der Baseline.
 
 ## Endpunkte
 

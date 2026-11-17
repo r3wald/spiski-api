@@ -27,8 +27,7 @@ final class ShareController
         private readonly ShareService $shares,
         private readonly RateLimiterFactoryInterface $shareJoinLimiter,
         private readonly ClockInterface $clock,
-    ) {
-    }
+    ) {}
 
     #[Route('/v1/lists/{id}/share', name: 'v1_list_share', methods: ['POST'])]
     #[OA\Post(
@@ -37,9 +36,21 @@ final class ShareController
         tags: ['Sharing'],
     )]
     #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))]
-    #[OA\Response(response: 200, description: 'Code und Link', content: new OA\JsonContent(ref: '#/components/schemas/ShareCode'))]
-    #[OA\Response(response: 403, description: 'Nur der Besitzer darf teilen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 404, description: 'Liste unbekannt oder nicht sichtbar', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 200,
+        description: 'Code und Link',
+        content: new OA\JsonContent(ref: '#/components/schemas/ShareCode'),
+    )]
+    #[OA\Response(
+        response: 403,
+        description: 'Nur der Besitzer darf teilen',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Liste unbekannt oder nicht sichtbar',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function share(string $id, Request $request, #[CurrentUser] User $user): JsonResponse
     {
         return $this->codeResponse($request, $this->shares->share($user, $this->listId($id)));
@@ -52,9 +63,21 @@ final class ShareController
         tags: ['Sharing'],
     )]
     #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))]
-    #[OA\Response(response: 200, description: 'Neuer Code und Link', content: new OA\JsonContent(ref: '#/components/schemas/ShareCode'))]
-    #[OA\Response(response: 403, description: 'Nur der Besitzer darf teilen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 404, description: 'Liste unbekannt oder nicht sichtbar', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 200,
+        description: 'Neuer Code und Link',
+        content: new OA\JsonContent(ref: '#/components/schemas/ShareCode'),
+    )]
+    #[OA\Response(
+        response: 403,
+        description: 'Nur der Besitzer darf teilen',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Liste unbekannt oder nicht sichtbar',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function renew(string $id, Request $request, #[CurrentUser] User $user): JsonResponse
     {
         return $this->codeResponse($request, $this->shares->renew($user, $this->listId($id)));
@@ -68,8 +91,16 @@ final class ShareController
     )]
     #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))]
     #[OA\Response(response: 204, description: 'Teilen beendet')]
-    #[OA\Response(response: 403, description: 'Nur der Besitzer darf teilen', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 404, description: 'Liste unbekannt oder nicht sichtbar', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 403,
+        description: 'Nur der Besitzer darf teilen',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Liste unbekannt oder nicht sichtbar',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function stop(string $id, #[CurrentUser] User $user): Response
     {
         $this->shares->stop($user, $this->listId($id));
@@ -85,8 +116,16 @@ final class ShareController
     )]
     #[OA\Parameter(name: 'id', in: 'path', required: true, schema: new OA\Schema(type: 'string', format: 'uuid'))]
     #[OA\Response(response: 204, description: 'Verlassen')]
-    #[OA\Response(response: 404, description: 'Kein Mitglied dieser Liste', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 409, description: 'Der Besitzer kann nicht austreten', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 404,
+        description: 'Kein Mitglied dieser Liste',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 409,
+        description: 'Der Besitzer kann nicht austreten',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function leave(string $id, #[CurrentUser] User $user): Response
     {
         $this->shares->leave($user, $this->listId($id));
@@ -95,22 +134,38 @@ final class ShareController
     }
 
     #[Route('/v1/shares/{code}', name: 'v1_share_join', methods: ['POST'])]
-    #[OA\Post(
-        summary: 'Einer geteilten Liste beitreten',
-        description: <<<'TEXT'
-            Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.
+    #[OA\Post(summary: 'Einer geteilten Liste beitreten', description: <<<'TEXT'
+        Macht das eigene Konto zum Mitglied. Die Liste und ihre Artikel kommen mit dem naechsten Sync. Idempotent. Gross-/Kleinschreibung, Bindestriche und Leerzeichen im Code sind egal.
 
-            Verschluesselte Listen: Besitzer und Mitglied muessen beide verschluesselt sein, und der Body traegt `wrappedKey` – den Listenschluessel aus dem Link-Fragment, mit dem eigenen Kontoschluessel verpackt. Ein erneuter Beitritt mit `wrappedKey` ersetzt den gespeicherten.
-            TEXT,
-        tags: ['Sharing'],
-    )]
+        Verschluesselte Listen: Besitzer und Mitglied muessen beide verschluesselt sein, und der Body traegt `wrappedKey` – den Listenschluessel aus dem Link-Fragment, mit dem eigenen Kontoschluessel verpackt. Ein erneuter Beitritt mit `wrappedKey` ersetzt den gespeicherten.
+        TEXT, tags: ['Sharing'])]
     #[OA\Parameter(name: 'code', in: 'path', required: true, schema: new OA\Schema(type: 'string'))]
     #[OA\RequestBody(required: false, content: new OA\JsonContent(ref: '#/components/schemas/JoinRequest'))]
-    #[OA\Response(response: 200, description: 'Beigetreten', content: new OA\JsonContent(ref: '#/components/schemas/JoinResult'))]
-    #[OA\Response(response: 400, description: '`wrappedKey` fehlt (verschluesselte Liste) oder ist ungueltig', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 404, description: 'Code unbekannt oder nicht mehr gueltig', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 409, description: 'Zu viele Mitglieder bzw. geteilte Listen, oder `encryption-required` (Besitzer und Mitglied nicht im selben Verschluesselungszustand)', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
-    #[OA\Response(response: 429, description: 'Zu viele Versuche, siehe Retry-After', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 200,
+        description: 'Beigetreten',
+        content: new OA\JsonContent(ref: '#/components/schemas/JoinResult'),
+    )]
+    #[OA\Response(
+        response: 400,
+        description: '`wrappedKey` fehlt (verschluesselte Liste) oder ist ungueltig',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 404,
+        description: 'Code unbekannt oder nicht mehr gueltig',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 409,
+        description: 'Zu viele Mitglieder bzw. geteilte Listen, oder `encryption-required` (Besitzer und Mitglied nicht im selben Verschluesselungszustand)',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
+    #[OA\Response(
+        response: 429,
+        description: 'Zu viele Versuche, siehe Retry-After',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function join(string $code, Request $request, #[CurrentUser] User $user): JsonResponse
     {
         $limit = $this->shareJoinLimiter->create(hash('xxh128', $user->getUserIdentifier()))->consume();
@@ -121,7 +176,12 @@ final class ShareController
             );
         }
 
-        return new JsonResponse(['listId' => $this->shares->join($user, $code, $this->clock->now(), $this->wrappedKey($request))]);
+        return new JsonResponse(['listId' => $this->shares->join(
+            $user,
+            $code,
+            $this->clock->now(),
+            $this->wrappedKey($request),
+        )]);
     }
 
     /**
@@ -150,7 +210,7 @@ final class ShareController
         if (!CipherFormat::isShort($wrappedKey)) {
             throw ApiProblemException::badRequest('"wrappedKey" hat nicht das Format v1.<nonce>.<chiffretext>.');
         }
-        \assert(\is_string($wrappedKey));
+        \assert(\is_string($wrappedKey), 'Oben auf das Format geprueft.');
 
         return $wrappedKey;
     }
@@ -168,7 +228,7 @@ final class ShareController
     {
         return new JsonResponse([
             'code' => $code,
-            'url' => $request->getSchemeAndHttpHost().'/join/'.$code,
+            'url' => $request->getSchemeAndHttpHost() . '/join/' . $code,
         ]);
     }
 }

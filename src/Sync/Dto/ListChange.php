@@ -25,8 +25,7 @@ final class ListChange
         public readonly ?string $enc = null,
         /** Listenschluessel, verpackt; bei verschluesselten Listen Pflicht. */
         public readonly ?string $wrappedKey = null,
-    ) {
-    }
+    ) {}
 
     public function isEncrypted(): bool
     {

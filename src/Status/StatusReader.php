@@ -43,8 +43,7 @@ final class StatusReader
         private readonly ClockInterface $clock,
         #[Autowire('%spiski.api_version%')]
         private readonly string $apiVersion,
-    ) {
-    }
+    ) {}
 
     /**
      * @return Status

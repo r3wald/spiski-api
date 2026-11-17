@@ -39,11 +39,22 @@ final class AdminListDeletionTest extends ApiTestCase
             'changes' => [
                 'lists' => [
                     self::listRow($this->listId, '2026-02-01T10:00:00.000Z', 'Wocheneinkauf'),
-                    self::listRow($this->deletedListId, '2026-02-01T10:00:00.000Z', 'Altliste', '2026-02-01T10:00:00.000Z'),
+                    self::listRow(
+                        $this->deletedListId,
+                        '2026-02-01T10:00:00.000Z',
+                        'Altliste',
+                        '2026-02-01T10:00:00.000Z',
+                    ),
                 ],
                 'items' => [
                     self::itemRow($this->itemId, $this->listId, '2026-02-01T10:00:01.000Z', 'Hafermilch'),
-                    self::itemRow(self::uuid(), $this->listId, '2026-02-01T10:00:01.000Z', 'Alt', '2026-02-01T10:00:02.000Z'),
+                    self::itemRow(
+                        self::uuid(),
+                        $this->listId,
+                        '2026-02-01T10:00:01.000Z',
+                        'Alt',
+                        '2026-02-01T10:00:02.000Z',
+                    ),
                 ],
             ],
         ]);
@@ -53,25 +64,28 @@ final class AdminListDeletionTest extends ApiTestCase
     public function testOverviewOffersDeleteOnlyForActiveLists(): void
     {
         $html = $this->adminHtml('/admin?q=liste');
-        self::assertStringNotContainsString('/admin/lists/'.$this->deletedListId.'/delete', $html);
+        self::assertStringNotContainsString('/admin/lists/' . $this->deletedListId . '/delete', $html);
 
         $html = $this->adminHtml('/admin?q=woche');
-        self::assertStringContainsString('href="/admin/lists/'.$this->listId.'/delete?limit=50&amp;offset=0&amp;q=woche"', $html);
+        self::assertStringContainsString(
+            'href="/admin/lists/' . $this->listId . '/delete?limit=50&amp;offset=0&amp;q=woche"',
+            $html,
+        );
     }
 
     public function testConfirmationPageNeedsTheAdminToken(): void
     {
-        $this->client->request('GET', '/admin/lists/'.$this->listId.'/delete');
+        $this->client->request('GET', '/admin/lists/' . $this->listId . '/delete');
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
 
-        $this->client->request('POST', '/admin/lists/'.$this->listId.'/delete', ['confirm' => 'x']);
+        $this->client->request('POST', '/admin/lists/' . $this->listId . '/delete', ['confirm' => 'x']);
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
         self::assertNull($this->listDeletedAt($this->listId));
     }
 
     public function testConfirmationPageShowsTheListAndChangesNothing(): void
     {
-        $html = $this->adminHtml('/admin/lists/'.$this->listId.'/delete?q=woche');
+        $html = $this->adminHtml('/admin/lists/' . $this->listId . '/delete?q=woche');
 
         self::assertStringContainsString('Diese Liste wirklich löschen?', $html);
         self::assertStringContainsString('Wocheneinkauf', $html);
@@ -79,7 +93,10 @@ final class AdminListDeletionTest extends ApiTestCase
         self::assertStringContainsString('(+ 1 archiviert)', $html);
         self::assertStringContainsString('1 Nutzer (nicht geteilt)', $html);
         self::assertStringContainsString('Archiv der App', $html);
-        self::assertStringContainsString('method="post" action="/admin/lists/'.$this->listId.'/delete?limit=50&amp;offset=0&amp;q=woche"', $html);
+        self::assertStringContainsString(
+            'method="post" action="/admin/lists/' . $this->listId . '/delete?limit=50&amp;offset=0&amp;q=woche"',
+            $html,
+        );
 
         self::assertNull($this->listDeletedAt($this->listId), 'Die Bestaetigungsseite allein loescht nichts.');
         self::assertSame([], RecordingHub::$updates);
@@ -87,15 +104,20 @@ final class AdminListDeletionTest extends ApiTestCase
 
     public function testDeleteWithoutValidConfirmationIsForbidden(): void
     {
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', []);
+        $this->adminPost('/admin/lists/' . $this->listId . '/delete', []);
         self::assertSame(403, $this->client->getResponse()->getStatusCode());
 
         // Ein Token fuer "Eintrag loeschen" mit derselben ID gilt nicht fuer eine Liste.
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', ['confirm' => $this->issue('delete-item', $this->listId)]);
+        $this->adminPost('/admin/lists/' . $this->listId . '/delete', ['confirm' => $this->issue(
+            'delete-item',
+            $this->listId,
+        )]);
         self::assertSame(403, $this->client->getResponse()->getStatusCode());
 
         // Und das Token einer anderen Liste auch nicht.
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', ['confirm' => $this->confirmToken($this->deletedListId)]);
+        $this->adminPost('/admin/lists/' . $this->listId . '/delete', [
+            'confirm' => $this->confirmToken($this->deletedListId),
+        ]);
         self::assertSame(403, $this->client->getResponse()->getStatusCode());
 
         self::assertNull($this->listDeletedAt($this->listId));
@@ -103,7 +125,11 @@ final class AdminListDeletionTest extends ApiTestCase
 
     public function testFormFromAnotherSiteIsRejectedEvenWithAValidToken(): void
     {
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', ['confirm' => $this->confirmToken($this->listId)], 'cross-site');
+        $this->adminPost(
+            '/admin/lists/' . $this->listId . '/delete',
+            ['confirm' => $this->confirmToken($this->listId)],
+            'cross-site',
+        );
 
         self::assertSame(403, $this->client->getResponse()->getStatusCode());
         self::assertNull($this->listDeletedAt($this->listId));
@@ -117,7 +143,11 @@ final class AdminListDeletionTest extends ApiTestCase
         $memberCursor = $this->cursor($member);
         RecordingHub::$updates = [];
 
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete?q=woche', ['confirm' => $this->confirmToken($this->listId)], 'same-origin');
+        $this->adminPost(
+            '/admin/lists/' . $this->listId . '/delete?q=woche',
+            ['confirm' => $this->confirmToken($this->listId)],
+            'same-origin',
+        );
 
         $response = $this->client->getResponse();
         self::assertSame(303, $response->getStatusCode());
@@ -133,8 +163,15 @@ final class AdminListDeletionTest extends ApiTestCase
         }
 
         // Wie in der App: nur die Liste bekommt den Tombstone, ihre Artikel bleiben.
-        self::assertNull($this->connection()->fetchOne('SELECT deleted_at FROM shopping_item WHERE id = :id', ['id' => $this->itemId]));
-        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM list_member WHERE list_id = :id', ['id' => $this->listId]));
+        self::assertNull($this->connection()->fetchOne('SELECT deleted_at FROM shopping_item WHERE id = :id', [
+            'id' => $this->itemId,
+        ]));
+        self::assertSame(
+            1,
+            (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM list_member WHERE list_id = :id', [
+                'id' => $this->listId,
+            ]),
+        );
 
         self::assertEqualsCanonicalizing(
             [$this->topic($this->owner) => null, $this->topic($member) => null],
@@ -159,35 +196,45 @@ final class AdminListDeletionTest extends ApiTestCase
         self::assertNotNull($this->listDeletedAt($this->listId));
 
         // Wiederherstellen aus dem Archiv der App: spaeterer Zeitstempel, deletedAt leer.
-        $restoredAt = (new \DateTimeImmutable('+1 second', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.v\Z');
+        $restoredAt = new \DateTimeImmutable('+1 second', new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z');
         $push = $this->sync($this->owner, [
             'since' => 0,
             'clientId' => $client,
             'changes' => ['lists' => [self::listRow($this->listId, $restoredAt, 'Wocheneinkauf')]],
         ]);
-        self::assertSame(['id' => $this->listId, 'accepted' => true], self::findPushResult($push, 'lists', $this->listId));
+        self::assertSame(
+            ['id' => $this->listId, 'accepted' => true],
+            self::findPushResult($push, 'lists', $this->listId),
+        );
         self::assertNull($this->listDeletedAt($this->listId));
     }
 
     public function testRepeatedDeleteChangesNothing(): void
     {
         $token = $this->confirmToken($this->listId);
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', ['confirm' => $token]);
+        $this->adminPost('/admin/lists/' . $this->listId . '/delete', ['confirm' => $token]);
         self::assertSame(303, $this->client->getResponse()->getStatusCode());
-        $version = $this->connection()->fetchOne('SELECT server_version FROM shopping_list WHERE id = :id', ['id' => $this->listId]);
+        $version = $this->connection()->fetchOne('SELECT server_version FROM shopping_list WHERE id = :id', [
+            'id' => $this->listId,
+        ]);
         RecordingHub::$updates = [];
 
-        $this->adminPost('/admin/lists/'.$this->listId.'/delete', ['confirm' => $token]);
+        $this->adminPost('/admin/lists/' . $this->listId . '/delete', ['confirm' => $token]);
 
         self::assertSame(303, $this->client->getResponse()->getStatusCode());
-        self::assertStringEndsWith('&notice=list-already-deleted', (string) $this->client->getResponse()->headers->get('Location'));
-        self::assertSame($version, $this->connection()->fetchOne('SELECT server_version FROM shopping_list WHERE id = :id', ['id' => $this->listId]));
+        self::assertStringEndsWith(
+            '&notice=list-already-deleted',
+            (string) $this->client->getResponse()->headers->get('Location'),
+        );
+        self::assertSame($version, $this->connection()->fetchOne('SELECT server_version FROM shopping_list WHERE id = :id', [
+            'id' => $this->listId,
+        ]));
         self::assertSame([], RecordingHub::$updates);
     }
 
     public function testConfirmationPageForADeletedListOffersNoButton(): void
     {
-        $html = $this->adminHtml('/admin/lists/'.$this->deletedListId.'/delete');
+        $html = $this->adminHtml('/admin/lists/' . $this->deletedListId . '/delete');
 
         self::assertStringContainsString('bereits gelöscht', $html);
         self::assertStringNotContainsString('<form', $html);
@@ -197,10 +244,10 @@ final class AdminListDeletionTest extends ApiTestCase
     {
         $unknown = self::uuid();
 
-        $this->adminRequest('GET', '/admin/lists/'.$unknown.'/delete');
+        $this->adminRequest('GET', '/admin/lists/' . $unknown . '/delete');
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
 
-        $this->adminPost('/admin/lists/'.$unknown.'/delete', ['confirm' => $this->issue('delete-list', $unknown)]);
+        $this->adminPost('/admin/lists/' . $unknown . '/delete', ['confirm' => $this->issue('delete-list', $unknown)]);
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
 
         $this->adminRequest('GET', '/admin/lists/kein-uuid/delete');
@@ -213,8 +260,15 @@ final class AdminListDeletionTest extends ApiTestCase
         $listId = self::uuid();
         $enc = self::cipher();
 
-        $this->protocol2('/v1/me/encryption/commit', $account, ['clientId' => self::uuid(), 'keyCheck' => self::cipher()]);
-        self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        $this->protocol2('/v1/me/encryption/commit', $account, [
+            'clientId' => self::uuid(),
+            'keyCheck' => self::cipher(),
+        ]);
+        self::assertSame(
+            200,
+            $this->client->getResponse()->getStatusCode(),
+            (string) $this->client->getResponse()->getContent(),
+        );
 
         $list = self::listRow($listId, '2026-06-01T10:00:00.000Z');
         unset($list['name']);
@@ -223,28 +277,42 @@ final class AdminListDeletionTest extends ApiTestCase
             'clientId' => self::uuid(),
             'changes' => ['lists' => [$list + ['enc' => $enc, 'wrappedKey' => self::cipher()]]],
         ]);
-        self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        self::assertSame(
+            200,
+            $this->client->getResponse()->getStatusCode(),
+            (string) $this->client->getResponse()->getContent(),
+        );
 
-        self::assertStringContainsString('🔒 verschlüsselt', $this->adminHtml('/admin/lists/'.$listId.'/delete'));
+        self::assertStringContainsString('🔒 verschlüsselt', $this->adminHtml('/admin/lists/' . $listId . '/delete'));
 
         $this->deleteConfirmed($listId);
 
         self::assertNotNull($this->listDeletedAt($listId));
-        self::assertSame($enc, $this->connection()->fetchOne('SELECT enc FROM shopping_list WHERE id = :id', ['id' => $listId]));
+        self::assertSame($enc, $this->connection()->fetchOne('SELECT enc FROM shopping_list WHERE id = :id', [
+            'id' => $listId,
+        ]));
     }
 
     // --- Helfer -----------------------------------------------------------
 
     private function deleteConfirmed(string $listId): void
     {
-        $this->adminPost('/admin/lists/'.$listId.'/delete', ['confirm' => $this->confirmToken($listId)], 'same-origin');
-        self::assertSame(303, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        $this->adminPost(
+            '/admin/lists/' . $listId . '/delete',
+            ['confirm' => $this->confirmToken($listId)],
+            'same-origin',
+        );
+        self::assertSame(
+            303,
+            $this->client->getResponse()->getStatusCode(),
+            (string) $this->client->getResponse()->getContent(),
+        );
     }
 
     /** Token so, wie der Browser es bekommt: aus der Bestaetigungsseite (auch fuer schon geloeschte nicht vorhanden). */
     private function confirmToken(string $listId): string
     {
-        $html = $this->adminHtml('/admin/lists/'.$listId.'/delete');
+        $html = $this->adminHtml('/admin/lists/' . $listId . '/delete');
 
         return 1 === preg_match('/name="confirm" value="([^"]+)"/', $html, $matches)
             ? $matches[1]
@@ -270,7 +338,7 @@ final class AdminListDeletionTest extends ApiTestCase
 
     private function adminRequest(string $method, string $path): void
     {
-        $this->client->request($method, $path, server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::ADMIN_TOKEN]);
+        $this->client->request($method, $path, server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN]);
     }
 
     /**
@@ -278,7 +346,7 @@ final class AdminListDeletionTest extends ApiTestCase
      */
     private function adminPost(string $path, array $form, ?string $secFetchSite = null): void
     {
-        $server = ['HTTP_AUTHORIZATION' => 'Bearer '.self::ADMIN_TOKEN];
+        $server = ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN];
         if (null !== $secFetchSite) {
             $server['HTTP_SEC_FETCH_SITE'] = $secFetchSite;
         }
@@ -288,20 +356,26 @@ final class AdminListDeletionTest extends ApiTestCase
     private function listDeletedAt(string $listId): ?string
     {
         /** @var string|null|false $value */
-        $value = $this->connection()->fetchOne('SELECT deleted_at FROM shopping_list WHERE id = :id', ['id' => $listId]);
+        $value = $this->connection()->fetchOne('SELECT deleted_at FROM shopping_list WHERE id = :id', [
+            'id' => $listId,
+        ]);
 
         return false === $value ? null : $value;
     }
 
     private function shareWith(string $member): void
     {
-        $this->client->request('POST', '/v1/lists/'.$this->listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$this->owner]);
+        $this->client->request('POST', '/v1/lists/' . $this->listId . '/share', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->owner,
+        ]);
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         /** @var array{code: string} $share */
         $share = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
 
         $this->sync($member, ['since' => 0, 'clientId' => self::uuid()]);
-        $this->client->request('POST', '/v1/shares/'.$share['code'], server: ['HTTP_AUTHORIZATION' => 'Bearer '.$member]);
+        $this->client->request('POST', '/v1/shares/' . $share['code'], server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $member,
+        ]);
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
     }
 
@@ -315,19 +389,24 @@ final class AdminListDeletionTest extends ApiTestCase
      */
     private function protocol2(string $path, string $account, array $body): void
     {
-        $this->client->request('POST', $path, server: [
-            'HTTP_AUTHORIZATION' => 'Bearer '.$account,
-            'HTTP_X_SPISKI_PROTOCOL' => '2',
-            'CONTENT_TYPE' => 'application/json',
-        ], content: json_encode($body, \JSON_THROW_ON_ERROR));
+        $this->client->request(
+            'POST',
+            $path,
+            server: [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $account,
+                'HTTP_X_SPISKI_PROTOCOL' => '2',
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            content: json_encode($body, \JSON_THROW_ON_ERROR),
+        );
     }
 
     /** Attrappe eines Chiffretexts im Format `v1.<nonce>.<chiffretext>`. */
     private static function cipher(): string
     {
-        $b64 = static fn (string $raw): string => rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
+        $b64 = static fn(string $raw): string => rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
 
-        return 'v1.'.$b64(random_bytes(12)).'.'.$b64(random_bytes(40));
+        return 'v1.' . $b64(random_bytes(12)) . '.' . $b64(random_bytes(40));
     }
 
     /**

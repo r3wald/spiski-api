@@ -44,17 +44,22 @@ final class SyncService
         private readonly SyncLock $lock,
         private readonly LiveUpdates $live,
         private readonly EncryptionPolicy $encryption,
-    ) {
-    }
+    ) {}
 
     /**
      * @param int $protocol was der Client kann (ClientProtocol, Header `X-Spiski-Protocol`)
      */
-    public function sync(User $user, SyncRequest $request, \DateTimeImmutable $now, int $protocol = ClientProtocol::LEGACY): SyncResult
-    {
+    public function sync(
+        User $user,
+        SyncRequest $request,
+        \DateTimeImmutable $now,
+        int $protocol = ClientProtocol::LEGACY,
+    ): SyncResult {
         /** @var mixed $result */
-        $result = $this->live->around(fn (): mixed => $this->em->wrapInTransaction(fn (): SyncResult => $this->run($user, $request, $now, $protocol)));
-        \assert($result instanceof SyncResult);
+        $result = $this->live->around(fn(): mixed => $this->em->wrapInTransaction(
+            fn(): SyncResult => $this->run($user, $request, $now, $protocol),
+        ));
+        \assert($result instanceof SyncResult, 'run() liefert immer ein SyncResult.');
 
         return $result;
     }
@@ -66,10 +71,13 @@ final class SyncService
 
         // Welche Listen beruehrt der Push? Gehoert eine davon einem anderen
         // Konto oder hat sie Mitglieder, braucht es die exklusive Sperre.
-        $itemLists = $this->access->listIdsOfItems(array_map(static fn (ItemChange $c): string => $c->id->toRfc4122(), $request->items));
+        $itemLists = $this->access->listIdsOfItems(array_map(
+            static fn(ItemChange $c): string => $c->id->toRfc4122(),
+            $request->items,
+        ));
         $touched = array_values(array_unique([
-            ...array_map(static fn (ListChange $c): string => $c->id->toRfc4122(), $request->lists),
-            ...array_map(static fn (ItemChange $c): string => $c->listId->toRfc4122(), $request->items),
+            ...array_map(static fn(ListChange $c): string => $c->id->toRfc4122(), $request->lists),
+            ...array_map(static fn(ItemChange $c): string => $c->listId->toRfc4122(), $request->items),
             ...array_values($itemLists),
         ]));
 
@@ -114,7 +122,15 @@ final class SyncService
         // vergebenen Versionen nicht.
         $this->em->flush();
 
-        return $this->pull($userId, $request, $since, $publisher->counter($userId), $fullResync, $listResults, $itemResults);
+        return $this->pull(
+            $userId,
+            $request,
+            $since,
+            $publisher->counter($userId),
+            $fullResync,
+            $listResults,
+            $itemResults,
+        );
     }
 
     /**
@@ -124,13 +140,16 @@ final class SyncService
      * ProtocolGuardListener am Eingang ist nur der schnelle Weg; diese hier ist
      * die verbindliche, weil ein `begin` zwischen beiden liegen kann.
      */
-    private function guardEncryption(Connection $connection, string $userId, int $protocol, Uuid $clientId): EncryptionState
-    {
+    private function guardEncryption(
+        Connection $connection,
+        string $userId,
+        int $protocol,
+        Uuid $clientId,
+    ): EncryptionState {
         /** @var array{encryption_state: string, migration_client_id: string|null}|false $row */
-        $row = $connection->fetchAssociative(
-            'SELECT encryption_state, migration_client_id FROM app_user WHERE id = :id',
-            ['id' => $userId],
-        );
+        $row = $connection->fetchAssociative('SELECT encryption_state, migration_client_id FROM app_user WHERE id = :id', [
+            'id' => $userId,
+        ]);
         if (false === $row) {
             throw new \LogicException('Gesperrtes Konto nicht gefunden.');
         }
@@ -147,10 +166,14 @@ final class SyncService
         }
 
         if (EncryptionState::Plaintext === $state && $this->encryption->deadlinePassed()) {
-            throw ApiProblemException::encryptionRequired('Die Frist ist abgelaufen: Das Konto muss zuerst auf Verschluesselung umgestellt werden.');
+            throw ApiProblemException::encryptionRequired(
+                'Die Frist ist abgelaufen: Das Konto muss zuerst auf Verschluesselung umgestellt werden.',
+            );
         }
         if (EncryptionState::Migrating === $state && $row['migration_client_id'] !== $clientId->toRfc4122()) {
-            throw ApiProblemException::migrationInProgress('Ein anderes Geraet stellt dieses Konto gerade auf Verschluesselung um.');
+            throw ApiProblemException::migrationInProgress(
+                'Ein anderes Geraet stellt dieses Konto gerade auf Verschluesselung um.',
+            );
         }
 
         return $state;
@@ -175,7 +198,12 @@ final class SyncService
             return MergeDecision::Accept;
         }
 
-        return $this->conflictResolver->decide($existing->getUpdatedAt(), $existing->getLastClientId(), $updatedAt, $clientId);
+        return $this->conflictResolver->decide(
+            $existing->getUpdatedAt(),
+            $existing->getLastClientId(),
+            $updatedAt,
+            $clientId,
+        );
     }
 
     /**
@@ -198,10 +226,19 @@ final class SyncService
      *
      * @return array<string, ShoppingList> die gepushten Listen, auch neu angelegte
      */
-    private function pushLists(User $user, EncryptionState $state, SyncRequest $request, VersionPublisher $publisher, array &$audiences, array &$listResults): array
-    {
+    private function pushLists(
+        User $user,
+        EncryptionState $state,
+        SyncRequest $request,
+        VersionPublisher $publisher,
+        array &$audiences,
+        array &$listResults,
+    ): array {
         $userId = $user->getId()->toRfc4122();
-        $existingLists = $this->listRepository->findByIds(array_map(static fn (ListChange $c): Uuid => $c->id, $request->lists));
+        $existingLists = $this->listRepository->findByIds(array_map(
+            static fn(ListChange $c): Uuid => $c->id,
+            $request->lists,
+        ));
         $listCount = null;
 
         foreach ($request->lists as $change) {
@@ -248,7 +285,7 @@ final class SyncService
                 ++$listCount;
             }
 
-            \assert($existing instanceof ShoppingList);
+            \assert($existing instanceof ShoppingList, 'Bestehend oder soeben angelegt.');
             $versions = $publisher->publish(SyncView::KIND_LIST, $key, $audiences[$key]->all());
             $existing->apply($change, $versions[$userId], $request->clientId);
             $listResults[] = PushResult::accepted($change->id);
@@ -262,14 +299,24 @@ final class SyncService
      * @param array<string, ShoppingList> $pushedLists
      * @param list<PushResult>            $itemResults
      */
-    private function pushItems(User $user, EncryptionState $state, SyncRequest $request, VersionPublisher $publisher, array $audiences, array $pushedLists, array &$itemResults): void
-    {
+    private function pushItems(
+        User $user,
+        EncryptionState $state,
+        SyncRequest $request,
+        VersionPublisher $publisher,
+        array $audiences,
+        array $pushedLists,
+        array &$itemResults,
+    ): void {
         $userId = $user->getId()->toRfc4122();
-        $existingItems = $this->itemRepository->findByIds(array_map(static fn (ItemChange $c): Uuid => $c->id, $request->items));
+        $existingItems = $this->itemRepository->findByIds(array_map(
+            static fn(ItemChange $c): Uuid => $c->id,
+            $request->items,
+        ));
 
         // Alle beteiligten Listen in einer Abfrage: Ziel-Listen der Artikel und
         // die Listen, in denen bestehende Artikel derzeit liegen.
-        $listIds = array_map(static fn (ItemChange $c): string => $c->listId->toRfc4122(), $request->items);
+        $listIds = array_map(static fn(ItemChange $c): string => $c->listId->toRfc4122(), $request->items);
         foreach ($existingItems as $item) {
             $listIds[] = $item->getList()->getId()->toRfc4122();
         }
@@ -350,7 +397,7 @@ final class SyncService
                 ++$itemCounts[$ownerKey];
             }
 
-            \assert($existing instanceof ShoppingItem);
+            \assert($existing instanceof ShoppingItem, 'Bestehend oder soeben angelegt.');
             $versions = $publisher->publish(SyncView::KIND_ITEM, $key, $audience->all());
             $existing->apply($change, $list, $versions[$audience->owner], $request->clientId, $user->getId());
             $itemResults[] = PushResult::accepted($change->id);
@@ -395,7 +442,7 @@ final class SyncService
         $itemIds = [];
         $revoked = [];
         foreach ($page as $row) {
-            $versions[$row['kind'].':'.$row['row_id']] = (int) $row['version'];
+            $versions[$row['kind'] . ':' . $row['row_id']] = (int) $row['version'];
             match ($row['kind']) {
                 SyncView::KIND_LIST => $listIds[] = $row['row_id'],
                 SyncView::KIND_ITEM => $itemIds[] = $row['row_id'],
@@ -409,8 +456,8 @@ final class SyncService
         // ihre alte Version <= since behaelt (CLAUDE.md 5.2, Schritt 5).
         // Nur Zeilen, die dieses Konto sehen darf.
         $echo = $this->visibleVersions($userId, [
-            SyncView::KIND_LIST => array_map(static fn (Uuid $id): string => $id->toRfc4122(), $request->pushedListIds),
-            SyncView::KIND_ITEM => array_map(static fn (Uuid $id): string => $id->toRfc4122(), $request->pushedItemIds),
+            SyncView::KIND_LIST => array_map(static fn(Uuid $id): string => $id->toRfc4122(), $request->pushedListIds),
+            SyncView::KIND_ITEM => array_map(static fn(Uuid $id): string => $id->toRfc4122(), $request->pushedItemIds),
         ]);
         foreach ($echo as $kindAndId => $version) {
             if (isset($versions[$kindAndId])) {
@@ -428,12 +475,16 @@ final class SyncService
         $outLists = array_values($this->listRepository->findByIds($listIds));
         $outItems = array_values($this->itemRepository->findByIds($itemIds));
 
-        $listVersion = static fn (ShoppingList $l): int => $versions[SyncView::KIND_LIST.':'.$l->getId()->toRfc4122()];
-        $itemVersion = static fn (ShoppingItem $i): int => $versions[SyncView::KIND_ITEM.':'.$i->getId()->toRfc4122()];
-        usort($outLists, static fn (ShoppingList $a, ShoppingList $b): int => $listVersion($a) <=> $listVersion($b));
-        usort($outItems, static fn (ShoppingItem $a, ShoppingItem $b): int => $itemVersion($a) <=> $itemVersion($b));
+        $listVersion = static fn(ShoppingList $l): int => $versions[SyncView::KIND_LIST
+            . ':'
+            . $l->getId()->toRfc4122()];
+        $itemVersion = static fn(ShoppingItem $i): int => $versions[SyncView::KIND_ITEM
+            . ':'
+            . $i->getId()->toRfc4122()];
+        usort($outLists, static fn(ShoppingList $a, ShoppingList $b): int => $listVersion($a) <=> $listVersion($b));
+        usort($outItems, static fn(ShoppingItem $a, ShoppingItem $b): int => $itemVersion($a) <=> $itemVersion($b));
 
-        $outListIds = array_map(static fn (ShoppingList $l): string => $l->getId()->toRfc4122(), $outLists);
+        $outListIds = array_map(static fn(ShoppingList $l): string => $l->getId()->toRfc4122(), $outLists);
 
         return new SyncResult(
             $serverCursor,
@@ -472,7 +523,7 @@ final class SyncService
                 ['ids' => ArrayParameterType::STRING],
             );
             foreach ($rows as $id => $version) {
-                $versions[$kind.':'.$id] = (int) $version;
+                $versions[$kind . ':' . $id] = (int) $version;
             }
         }
 

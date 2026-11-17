@@ -22,9 +22,7 @@ final class ClientProtocol
     /** Ab hier kann der Client verschluesselte Zeilen lesen und schreiben. */
     public const ENCRYPTION = 2;
 
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 
     public static function fromRequest(Request $request): int
     {

@@ -34,8 +34,7 @@ final class ShareService
         private readonly ListAccess $access,
         private readonly SyncLock $lock,
         private readonly LiveUpdates $live,
-    ) {
-    }
+    ) {}
 
     /** Vorhandenen Code liefern oder einen neuen anlegen. Nur der Besitzer. */
     public function share(User $user, string $listId): string
@@ -86,7 +85,9 @@ final class ShareService
             $userId = $user->getId()->toRfc4122();
 
             /** @var string|false $listId */
-            $listId = '' === $code ? false : $connection->fetchOne('SELECT id FROM shopping_list WHERE share_code = :code', ['code' => $code]);
+            $listId = '' === $code
+                ? false
+                : $connection->fetchOne('SELECT id FROM shopping_list WHERE share_code = :code', ['code' => $code]);
             if (false === $listId) {
                 throw ApiProblemException::notFound('Unbekannter oder nicht mehr gueltiger Teilen-Code.');
             }
@@ -109,22 +110,28 @@ final class ShareService
             // einer Liste, deren Zeilen es weder lesen noch gueltig schreiben
             // kann. Waehrend einer Umstellung gibt es kein Teilen.
             if ($states[$audience->owner] !== $states[$userId] || EncryptionState::Migrating === $states[$userId]) {
-                throw ApiProblemException::encryptionRequired('Diese Liste und dieses Konto sind nicht beide verschluesselt bzw. beide unverschluesselt.');
+                throw ApiProblemException::encryptionRequired(
+                    'Diese Liste und dieses Konto sind nicht beide verschluesselt bzw. beide unverschluesselt.',
+                );
             }
             if ($encrypted && null === $wrappedKey) {
                 throw ApiProblemException::badRequest('"wrappedKey" fehlt: Die Liste ist verschluesselt.');
             }
             if (\count($audience->members) >= SyncLimits::MAX_MEMBERS_PER_LIST) {
-                throw ApiProblemException::conflict('Diese Liste ist bereits mit der maximalen Zahl an Personen geteilt.');
+                throw ApiProblemException::conflict(
+                    'Diese Liste ist bereits mit der maximalen Zahl an Personen geteilt.',
+                );
             }
             if ($this->access->countMemberships($userId) >= SyncLimits::MAX_MEMBERSHIPS_PER_USER) {
                 throw ApiProblemException::conflict('Maximale Zahl geteilter Listen erreicht.');
             }
 
-            $connection->executeStatement(
-                'INSERT INTO list_member (list_id, user_id, joined_at, wrapped_key) VALUES (:list, :user, :now, :key)',
-                ['list' => $listId, 'user' => $userId, 'now' => $now->format('Y-m-d H:i:s.uP'), 'key' => $encrypted ? $wrappedKey : null],
-            );
+            $connection->executeStatement('INSERT INTO list_member (list_id, user_id, joined_at, wrapped_key) VALUES (:list, :user, :now, :key)', [
+                'list' => $listId,
+                'user' => $userId,
+                'now' => $now->format('Y-m-d H:i:s.uP'),
+                'key' => $encrypted ? $wrappedKey : null,
+            ]);
 
             $publisher = VersionPublisher::lock($connection, [...$audience->all(), $userId]);
             $publisher->unrevoke($userId, $listId);
@@ -156,7 +163,9 @@ final class ShareService
                 throw ApiProblemException::notFound('Liste nicht gefunden.');
             }
             if ($audience->owner === $userId) {
-                throw ApiProblemException::conflict('Der Besitzer kann seine Liste nicht verlassen, nur das Teilen beenden.');
+                throw ApiProblemException::conflict(
+                    'Der Besitzer kann seine Liste nicht verlassen, nur das Teilen beenden.',
+                );
             }
 
             $this->removeMember($connection, $listId, $audience, $userId);
@@ -212,10 +221,9 @@ final class ShareService
 
         // Auch Codes, mit denen noch niemand beigetreten ist: Der neue Link muss
         // den Listenschluessel tragen.
-        $connection->executeStatement(
-            'UPDATE shopping_list SET share_code = NULL WHERE user_id = :user AND share_code IS NOT NULL',
-            ['user' => $userId],
-        );
+        $connection->executeStatement('UPDATE shopping_list SET share_code = NULL WHERE user_id = :user AND share_code IS NOT NULL', [
+            'user' => $userId,
+        ]);
     }
 
     public static function normalize(string $code): string
@@ -248,25 +256,30 @@ final class ShareService
      */
     private function storeMemberKey(Connection $connection, string $listId, string $userId, string $wrappedKey): void
     {
-        $connection->executeStatement(
-            'UPDATE list_member SET wrapped_key = :key WHERE list_id = :list AND user_id = :user',
-            ['key' => $wrappedKey, 'list' => $listId, 'user' => $userId],
-        );
+        $connection->executeStatement('UPDATE list_member SET wrapped_key = :key WHERE list_id = :list AND user_id = :user', [
+            'key' => $wrappedKey,
+            'list' => $listId,
+            'user' => $userId,
+        ]);
         $publisher = VersionPublisher::lock($connection, [$userId]);
         $publisher->publish(SyncView::KIND_LIST, $listId, [$userId]);
         $this->live->queue($publisher->flush($connection));
     }
 
-    private function removeMember(Connection $connection, string $listId, ListAudience $audience, string $memberId): void
-    {
+    private function removeMember(
+        Connection $connection,
+        string $listId,
+        ListAudience $audience,
+        string $memberId,
+    ): void {
         $publisher = VersionPublisher::lock($connection, $audience->all());
         $publisher->revoke($memberId, $listId, $this->access->itemIdsOfList($listId));
         $this->touchList($connection, $publisher, $listId, $audience->without($memberId));
 
-        $connection->executeStatement(
-            'DELETE FROM list_member WHERE list_id = :list AND user_id = :user',
-            ['list' => $listId, 'user' => $memberId],
-        );
+        $connection->executeStatement('DELETE FROM list_member WHERE list_id = :list AND user_id = :user', [
+            'list' => $listId,
+            'user' => $memberId,
+        ]);
         $this->live->queue($publisher->flush($connection));
     }
 
@@ -274,13 +287,17 @@ final class ShareService
      * Liefert die Liste allen Teilnehmern neu aus, ohne ihren Inhalt zu
      * aendern – fuer die geaenderte Mitgliederzahl.
      */
-    private function touchList(Connection $connection, VersionPublisher $publisher, string $listId, ListAudience $audience): void
-    {
+    private function touchList(
+        Connection $connection,
+        VersionPublisher $publisher,
+        string $listId,
+        ListAudience $audience,
+    ): void {
         $versions = $publisher->publish(SyncView::KIND_LIST, $listId, $audience->all());
-        $connection->executeStatement(
-            'UPDATE shopping_list SET server_version = :version WHERE id = :id',
-            ['version' => $versions[$audience->owner], 'id' => $listId],
-        );
+        $connection->executeStatement('UPDATE shopping_list SET server_version = :version WHERE id = :id', [
+            'version' => $versions[$audience->owner],
+            'id' => $listId,
+        ]);
     }
 
     private function requireOwner(User $user, string $listId): ListAudience
@@ -307,7 +324,10 @@ final class ShareService
             $code .= self::ALPHABET[\ord($bytes[$i]) % 32];
         }
 
-        $connection->executeStatement('UPDATE shopping_list SET share_code = :code WHERE id = :id', ['code' => $code, 'id' => $listId]);
+        $connection->executeStatement('UPDATE shopping_list SET share_code = :code WHERE id = :id', [
+            'code' => $code,
+            'id' => $listId,
+        ]);
 
         return $code;
     }
@@ -323,6 +343,8 @@ final class ShareService
     {
         $connection = $this->em->getConnection();
 
-        return $this->live->around(static fn (): mixed => $connection->transactional(static fn (): mixed => $work($connection)));
+        return $this->live->around(static fn(): mixed => $connection->transactional(
+            static fn(): mixed => $work($connection),
+        ));
     }
 }

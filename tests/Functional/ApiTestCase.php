@@ -23,7 +23,9 @@ abstract class ApiTestCase extends WebTestCase
     protected function setUp(): void
     {
         $this->client = static::createClient();
-        $this->connection()->executeStatement('TRUNCATE app_user, shopping_list, shopping_item, list_member, sync_view RESTART IDENTITY CASCADE');
+        $this->connection()->executeStatement(
+            'TRUNCATE app_user, shopping_list, shopping_item, list_member, sync_view RESTART IDENTITY CASCADE',
+        );
     }
 
     protected function connection(): Connection
@@ -73,7 +75,7 @@ abstract class ApiTestCase extends WebTestCase
             'POST',
             '/v1/sync',
             server: [
-                'HTTP_AUTHORIZATION' => 'Bearer '.$accountId,
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $accountId,
                 'CONTENT_TYPE' => 'application/json',
             ],
             content: json_encode($payload, \JSON_THROW_ON_ERROR),
@@ -83,8 +85,12 @@ abstract class ApiTestCase extends WebTestCase
     /**
      * @return array<string, mixed>
      */
-    protected static function listRow(string $id, string $updatedAt, string $name = 'Liste', ?string $deletedAt = null): array
-    {
+    protected static function listRow(
+        string $id,
+        string $updatedAt,
+        string $name = 'Liste',
+        ?string $deletedAt = null,
+    ): array {
         return [
             'id' => $id,
             'name' => $name,
@@ -100,8 +106,13 @@ abstract class ApiTestCase extends WebTestCase
     /**
      * @return array<string, mixed>
      */
-    protected static function itemRow(string $id, string $listId, string $updatedAt, string $name = 'Artikel', ?string $deletedAt = null): array
-    {
+    protected static function itemRow(
+        string $id,
+        string $listId,
+        string $updatedAt,
+        string $name = 'Artikel',
+        ?string $deletedAt = null,
+    ): array {
         return [
             'id' => $id,
             'listId' => $listId,

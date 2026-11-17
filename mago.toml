@@ -1,0 +1,33 @@
+# Mago (https://mago.carthage.software/): Linter, statische Analyse und Formatierer.
+# Laeuft neben PHPStan; `make check` ruft beides auf, dazu `mago format --check`.
+version = "1.60"
+php-version = "8.5"
+
+[source]
+paths = ["bin", "config", "public", "src", "tests", "migrations"]
+# Abhaengigkeiten nur fuer Typinformationen lesen, nie pruefen oder aendern.
+includes = ["vendor"]
+excludes = ["var/**", "public/bundles/**", "config/reference.php"]
+
+[source.glob]
+literal-separator = true
+
+[linter]
+integrations = ["symfony", "phpunit", "doctrine"]
+# Bestand bei der Einfuehrung (vor allem Komplexitaetsmetriken). Neue Befunde
+# schlagen fehl; behobene Eintraege mit `make mago-baseline-prune` entfernen.
+baseline = "mago-lint-baseline.toml"
+
+[linter.rules]
+# Projektkonvention (wie Symfony selbst): self::assertSame() statt static::/$this->.
+assertion-style = { style = "self" }
+# Wuerde fast jeden Aufruf mit einem Literal betreffen (assertSame(1, …), fetchOne(…, [])).
+# Benannte Argumente setzen wir gezielt ein, wo sie lesbarer sind, nicht pauschal.
+literal-named-argument = { enabled = false }
+# Tests brauchen feste Test-Tokens (ADMIN_TOKEN aus .env.test); echte stehen nie im Code.
+no-literal-password = { exclude = ["tests/"] }
+
+[analyzer]
+# Bestand bei der Einfuehrung: gemischte Typen aus json_decode (Request-Parser, Tests)
+# und die veralteten swagger-php-Attribute (OA\JsonContent/OA\Schema, siehe README).
+baseline = "mago-analysis-baseline.toml"

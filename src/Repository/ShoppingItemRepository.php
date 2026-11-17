@@ -35,9 +35,12 @@ class ShoppingItemRepository extends ServiceEntityRepository
         }
 
         /** @var list<ShoppingItem> $rows */
-        $rows = $this->createQueryBuilder('i')
+        $rows = $this
+            ->createQueryBuilder('i')
             ->andWhere('i.id IN (:ids)')
-            ->setParameter('ids', array_map(static fn (Uuid|string $id): string => $id instanceof Uuid ? $id->toRfc4122() : $id, $ids))
+            ->setParameter('ids', array_map(static fn(Uuid|string $id): string => $id instanceof Uuid
+                ? $id->toRfc4122()
+                : $id, $ids))
             ->getQuery()
             ->getResult();
 
@@ -52,7 +55,8 @@ class ShoppingItemRepository extends ServiceEntityRepository
     public function countForUser(User $user): int
     {
         /** @var int|string $count */
-        $count = $this->createQueryBuilder('i')
+        $count = $this
+            ->createQueryBuilder('i')
             ->select('COUNT(i.id)')
             ->andWhere('i.user = :user')
             ->setParameter('user', $user)

@@ -28,8 +28,7 @@ final class ItemChange
         public readonly ?\DateTimeImmutable $movedAt,
         /** Verschluesselter Inhalt: Name, Menge, Einheit, Notiz (CLAUDE.md 14). */
         public readonly ?string $enc = null,
-    ) {
-    }
+    ) {}
 
     public function isEncrypted(): bool
     {

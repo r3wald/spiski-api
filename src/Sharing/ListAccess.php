@@ -16,8 +16,7 @@ final class ListAccess
 {
     public function __construct(
         private readonly Connection $connection,
-    ) {
-    }
+    ) {}
 
     /**
      * Besitzer und Mitglieder der angegebenen Listen. Unbekannte IDs fehlen im
@@ -34,17 +33,13 @@ final class ListAccess
         }
 
         /** @var list<array{id: string, user_id: string, member: string|null}> $rows */
-        $rows = $this->connection->fetchAllAssociative(
-            <<<'SQL'
-                SELECT l.id, l.user_id, m.user_id AS member
-                FROM shopping_list l
-                LEFT JOIN list_member m ON m.list_id = l.id
-                WHERE l.id IN (:ids)
-                ORDER BY l.id, m.user_id
-                SQL,
-            ['ids' => array_values(array_unique($listIds))],
-            ['ids' => ArrayParameterType::STRING],
-        );
+        $rows = $this->connection->fetchAllAssociative(<<<'SQL'
+            SELECT l.id, l.user_id, m.user_id AS member
+            FROM shopping_list l
+            LEFT JOIN list_member m ON m.list_id = l.id
+            WHERE l.id IN (:ids)
+            ORDER BY l.id, m.user_id
+            SQL, ['ids' => array_values(array_unique($listIds))], ['ids' => ArrayParameterType::STRING]);
 
         $owners = [];
         $members = [];
@@ -127,7 +122,7 @@ final class ListAccess
             ['ids' => ArrayParameterType::STRING],
         );
 
-        return array_map(static fn (string $value): \DateTimeImmutable => new \DateTimeImmutable($value), $rows);
+        return array_map(static fn(string $value): \DateTimeImmutable => new \DateTimeImmutable($value), $rows);
     }
 
     /**
@@ -197,7 +192,9 @@ final class ListAccess
 
     public function countMemberships(string $userId): int
     {
-        return (int) $this->connection->fetchOne('SELECT COUNT(*) FROM list_member WHERE user_id = :user', ['user' => $userId]);
+        return (int) $this->connection->fetchOne('SELECT COUNT(*) FROM list_member WHERE user_id = :user', [
+            'user' => $userId,
+        ]);
     }
 
     /**
@@ -206,9 +203,8 @@ final class ListAccess
     public function itemIdsOfList(string $listId): array
     {
         /** @var list<string> */
-        return $this->connection->fetchFirstColumn(
-            'SELECT id FROM shopping_item WHERE list_id = :list ORDER BY server_version',
-            ['list' => $listId],
-        );
+        return $this->connection->fetchFirstColumn('SELECT id FROM shopping_item WHERE list_id = :list ORDER BY server_version', [
+            'list' => $listId,
+        ]);
     }
 }

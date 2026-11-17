@@ -24,8 +24,7 @@ final class BuildInfo
     public function __construct(
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
-    ) {
-    }
+    ) {}
 
     /** Kurzer Commit-Hash, mit `-dirty`, wenn beim Deployment uncommittete Aenderungen dabei waren. */
     public function revision(): ?string
@@ -48,39 +47,51 @@ final class BuildInfo
             return $this->data;
         }
 
-        $this->data = ['revision' => null, 'deployedAt' => null];
+        return $this->data = $this->read();
+    }
 
-        $path = $this->projectDir.'/'.self::FILE;
-        $raw = is_file($path) ? @file_get_contents($path) : false;
+    /**
+     * @return array{revision: ?string, deployedAt: ?string}
+     */
+    private function read(): array
+    {
+        $unknown = ['revision' => null, 'deployedAt' => null];
+
+        $path = $this->projectDir . '/' . self::FILE;
+        $raw = is_file($path) && is_readable($path) ? file_get_contents($path) : false;
         if (false === $raw) {
-            return $this->data;
+            return $unknown;
         }
 
         try {
             $decoded = json_decode($raw, true, 4, \JSON_THROW_ON_ERROR);
         } catch (\JsonException) {
-            return $this->data;
+            return $unknown;
         }
         if (!\is_array($decoded)) {
-            return $this->data;
+            return $unknown;
         }
 
         $revision = $decoded['revision'] ?? null;
-        if (\is_string($revision) && 1 === preg_match('/^[0-9a-f]{7,40}(-dirty)?$/', $revision)) {
-            $this->data['revision'] = $revision;
-        }
-
         $deployedAt = $decoded['deployedAt'] ?? null;
-        if (\is_string($deployedAt) && '' !== $deployedAt) {
-            try {
-                $this->data['deployedAt'] = (new \DateTimeImmutable($deployedAt))
-                    ->setTimezone(new \DateTimeZone('UTC'))
-                    ->format(SyncLimits::TIMESTAMP_FORMAT);
-            } catch (\Exception) {
-                // Unlesbar: lieber kein Wert als ein falscher.
-            }
-        }
 
-        return $this->data;
+        return [
+            'revision' => \is_string($revision) && 1 === preg_match('/^[0-9a-f]{7,40}(-dirty)?$/', $revision)
+                ? $revision
+                : null,
+            'deployedAt' => \is_string($deployedAt) && '' !== $deployedAt ? $this->utcTimestamp($deployedAt) : null,
+        ];
+    }
+
+    private function utcTimestamp(string $value): ?string
+    {
+        try {
+            return new \DateTimeImmutable($value)
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format(SyncLimits::TIMESTAMP_FORMAT);
+        } catch (\Exception) {
+            // Unlesbar: lieber kein Wert als ein falscher.
+            return null;
+        }
     }
 }

@@ -16,8 +16,7 @@ final class ClockSkewGuard
 {
     public function __construct(
         private readonly int $toleranceSeconds,
-    ) {
-    }
+    ) {}
 
     public function clamp(\DateTimeImmutable $value, \DateTimeImmutable $now): \DateTimeImmutable
     {

@@ -15,7 +15,5 @@ final class AdminPageLimits
     public const MAX_OFFSET = 1_000_000;
     public const MAX_QUERY_LENGTH = 100;
 
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 }

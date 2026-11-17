@@ -18,9 +18,9 @@ final class RecordingHub implements HubInterface
     /** @var list<Update> */
     public static array $updates = [];
 
-    public function __construct(private readonly HubInterface $inner)
-    {
-    }
+    public function __construct(
+        private readonly HubInterface $inner,
+    ) {}
 
     public function getPublicUrl(): string
     {

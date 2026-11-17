@@ -11,7 +11,7 @@ Ein reines API-Backend, das die lokalen Daten der Spiski-App (Einkaufslisten und
 | Framework | Symfony 8.1 (API-only Skeleton, kein Twig/Webapp-Bundle) |
 | PHP | 8.5 (aktuelle Stable-Branch, Active Support bis 12/2027; Symfony 8.1 verlangt ≥ 8.4) |
 | Datenbank | PostgreSQL 18 – produktiv **und** in Tests, kein SQLite |
-| Static Analysis | PHPStan Level 6 (mittleres Level) |
+| Static Analysis | PHPStan Level 6 (mittleres Level) und Mago (Lint, Analyse, Formatierung; `mago.toml`, Bestand in Baselines, neue Befunde ab *warning* schlagen fehl) |
 | API-Beschreibung | Vollständige OpenAPI-3-Spezifikation, aus dem Code generiert und versioniert im Repo |
 | Identität (Account) | Pro Nutzer eine UUIDv4 (`accountId`), client-generiert, dient als Bearer-Token |
 | Identität (Gerät) | Pro Installation zusätzlich eine UUIDv4 (`clientId`), **nicht** übertragbar, nur Konflikt-Tiebreaker |
@@ -337,7 +337,8 @@ api/
   compose.prod.yaml          // Server (prod + staging): nur 127.0.0.1, TLS beim Nginx davor, Secrets in .env.prod/.env.staging
   update-prod.sh, update-staging.sh  // Deployment per rsync/ssh, je Server-Umgebung eins
   Dockerfile                   // Stages: base, dev, prod
-  Makefile                     // make check = stan + test + openapi-check
+  mago.toml                    // Mago-Konfiguration; Bestand in mago-lint-baseline.toml, mago-analysis-baseline.toml
+  Makefile                     // make check = mago (fmt-check, lint, analyze) + stan + test + openapi-check
 ```
 
 Betriebshinweise stehen in `README.md`.
@@ -375,7 +376,7 @@ Konkretes Ziel noch offen; das Setup bleibt so, dass es auf einem einfachen VPS 
 
 ### CI (GitHub Actions o. ä.)
 
-Tests gegen einen PostgreSQL-18-Service, PHPStan Level 6, OpenAPI-Diff-Check.
+Tests gegen einen PostgreSQL-18-Service, Mago (`format --check`, `lint`, `analyze`), PHPStan Level 6, OpenAPI-Diff-Check.
 
 ### Backups
 

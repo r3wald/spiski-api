@@ -27,7 +27,7 @@ final class StatusTest extends ApiTestCase
 
     public function testApiVersionMatchesTheOpenApiSpecification(): void
     {
-        $spec = (string) file_get_contents(\dirname(__DIR__, 2).'/openapi.yaml');
+        $spec = (string) file_get_contents(\dirname(__DIR__, 2) . '/openapi.yaml');
         self::assertSame(1, preg_match('/^  version: \'?([^\s\']+)\'?$/m', $spec, $matches));
 
         self::assertSame($matches[1], $this->statusJson()['api']['version']);
@@ -56,38 +56,47 @@ final class StatusTest extends ApiTestCase
         ]);
         $this->sync($member, ['since' => 0, 'clientId' => self::uuid()]);
 
-        $this->client->request('POST', '/v1/lists/'.$listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$owner]);
+        $this->client->request('POST', '/v1/lists/' . $listId . '/share', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $owner,
+        ]);
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         /** @var array{code: string} $share */
         $share = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
-        $this->client->request('POST', '/v1/shares/'.$share['code'], server: ['HTTP_AUTHORIZATION' => 'Bearer '.$member]);
+        $this->client->request('POST', '/v1/shares/' . $share['code'], server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $member,
+        ]);
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
 
         // Ein seit 10 Tagen inaktives Konto: zaehlt fuer 30 Tage, nicht fuer 24 h und 7 Tage.
         $this->sync($idle = self::uuid(), ['since' => 0, 'clientId' => self::uuid()]);
-        $this->connection()->executeStatement(
-            "UPDATE app_user SET last_seen_at = now() - interval '10 days' WHERE id = :id",
-            ['id' => $idle],
-        );
+        $this->connection()->executeStatement("UPDATE app_user SET last_seen_at = now() - interval '10 days' WHERE id = :id", [
+            'id' => $idle,
+        ]);
 
-        self::assertSame([
-            'accounts' => ['total' => 3, 'active24h' => 2, 'active7d' => 2, 'active30d' => 3],
-            'lists' => ['active' => 1, 'deleted' => 1, 'shared' => 1],
-            'items' => ['active' => 2, 'archived' => 1],
-            'memberships' => 1,
-            'encryption' => ['plaintext' => 3, 'migrating' => 0, 'encrypted' => 0],
-        ], $this->statusJson()['statistics']);
+        self::assertSame(
+            [
+                'accounts' => ['total' => 3, 'active24h' => 2, 'active7d' => 2, 'active30d' => 3],
+                'lists' => ['active' => 1, 'deleted' => 1, 'shared' => 1],
+                'items' => ['active' => 2, 'archived' => 1],
+                'memberships' => 1,
+                'encryption' => ['plaintext' => 3, 'migrating' => 0, 'encrypted' => 0],
+            ],
+            $this->statusJson()['statistics'],
+        );
     }
 
     public function testEmptyDatabaseHasZeroStatistics(): void
     {
-        self::assertSame([
-            'accounts' => ['total' => 0, 'active24h' => 0, 'active7d' => 0, 'active30d' => 0],
-            'lists' => ['active' => 0, 'deleted' => 0, 'shared' => 0],
-            'items' => ['active' => 0, 'archived' => 0],
-            'memberships' => 0,
-            'encryption' => ['plaintext' => 0, 'migrating' => 0, 'encrypted' => 0],
-        ], $this->statusJson()['statistics']);
+        self::assertSame(
+            [
+                'accounts' => ['total' => 0, 'active24h' => 0, 'active7d' => 0, 'active30d' => 0],
+                'lists' => ['active' => 0, 'deleted' => 0, 'shared' => 0],
+                'items' => ['active' => 0, 'archived' => 0],
+                'memberships' => 0,
+                'encryption' => ['plaintext' => 0, 'migrating' => 0, 'encrypted' => 0],
+            ],
+            $this->statusJson()['statistics'],
+        );
     }
 
     public function testHtmlIsPublicAndShowsTheState(): void
@@ -97,11 +106,14 @@ final class StatusTest extends ApiTestCase
         $response = $this->client->getResponse();
         self::assertSame(200, $response->getStatusCode());
         self::assertStringStartsWith('text/html', (string) $response->headers->get('Content-Type'));
-        self::assertStringContainsString("default-src 'none'", (string) $response->headers->get('Content-Security-Policy'));
+        self::assertStringContainsString(
+            "default-src 'none'",
+            (string) $response->headers->get('Content-Security-Policy'),
+        );
 
         $html = (string) $response->getContent();
         self::assertStringContainsString('Alle Systeme betriebsbereit', $html);
-        self::assertStringContainsString('<code>'.$this->statusJson()['api']['version'].'</code>', $html);
+        self::assertStringContainsString('<code>' . $this->statusJson()['api']['version'] . '</code>', $html);
         self::assertStringContainsString('href="/status.json"', $html);
         self::assertStringNotContainsString('<script', $html);
     }
@@ -128,7 +140,7 @@ final class StatusTest extends ApiTestCase
 
     public function testAccountTokenIsIgnoredAndCreatesNoAccount(): void
     {
-        $this->client->request('GET', '/status.json', server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::uuid()]);
+        $this->client->request('GET', '/status.json', server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::uuid()]);
 
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM app_user'));

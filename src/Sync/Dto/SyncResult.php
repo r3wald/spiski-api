@@ -37,6 +37,5 @@ final class SyncResult
         public readonly array $memberCounts = [],
         public readonly array $joinedAt = [],
         public readonly array $memberWrappedKeys = [],
-    ) {
-    }
+    ) {}
 }

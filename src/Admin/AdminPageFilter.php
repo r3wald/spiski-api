@@ -18,6 +18,5 @@ final class AdminPageFilter
         public readonly bool $showArchivedItems = false,
         /** Die Eintraege jeder Liste aufgeklappt darstellen. */
         public readonly bool $expandItems = false,
-    ) {
-    }
+    ) {}
 }

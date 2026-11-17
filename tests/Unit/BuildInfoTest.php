@@ -13,14 +13,18 @@ final class BuildInfoTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->dir = sys_get_temp_dir().'/spiski-build-info-'.bin2hex(random_bytes(4));
+        $this->dir = sys_get_temp_dir() . '/spiski-build-info-' . bin2hex(random_bytes(4));
         mkdir($this->dir);
     }
 
     protected function tearDown(): void
     {
-        @unlink($this->dir.'/'.BuildInfo::FILE);
-        @rmdir($this->dir);
+        if (is_file($this->dir . '/' . BuildInfo::FILE)) {
+            unlink($this->dir . '/' . BuildInfo::FILE);
+        }
+        if (is_dir($this->dir)) {
+            rmdir($this->dir);
+        }
     }
 
     public function testMissingFileMeansUnknown(): void
@@ -62,11 +66,11 @@ final class BuildInfoTest extends TestCase
     {
         $this->write('{kaputt');
 
-        self::assertNull((new BuildInfo($this->dir))->revision());
+        self::assertNull(new BuildInfo($this->dir)->revision());
     }
 
     private function write(string $content): void
     {
-        file_put_contents($this->dir.'/'.BuildInfo::FILE, $content);
+        file_put_contents($this->dir . '/' . BuildInfo::FILE, $content);
     }
 }

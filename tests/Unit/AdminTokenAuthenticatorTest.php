@@ -21,7 +21,7 @@ final class AdminTokenAuthenticatorTest extends TestCase
 
     public function testAcceptsTheConfiguredToken(): void
     {
-        $passport = $this->authenticator(self::TOKEN)->authenticate($this->request('Bearer '.self::TOKEN));
+        $passport = $this->authenticator(self::TOKEN)->authenticate($this->request('Bearer ' . self::TOKEN));
 
         $badge = $passport->getBadge(UserBadge::class);
         self::assertInstanceOf(UserBadge::class, $badge);
@@ -32,7 +32,7 @@ final class AdminTokenAuthenticatorTest extends TestCase
     {
         $this->expectException(CustomUserMessageAuthenticationException::class);
 
-        $this->authenticator(self::TOKEN)->authenticate($this->request('Bearer '.self::TOKEN.'-nope'));
+        $this->authenticator(self::TOKEN)->authenticate($this->request('Bearer ' . self::TOKEN . '-nope'));
     }
 
     public function testEmptyConfiguredTokenDisablesAdminAccess(): void
@@ -66,13 +66,13 @@ final class AdminTokenAuthenticatorTest extends TestCase
                 $authenticator->authenticate($this->request('Bearer falsch'));
                 self::fail('Falsches Token wurde akzeptiert.');
             } catch (CustomUserMessageAuthenticationException) {
-                // erwartet
+                $this->addToAssertionCount(1); // erwartet
             }
         }
 
         try {
             // Selbst das richtige Token wird jetzt gebremst: das Limit zaehlt Versuche, nicht Fehlschlaege.
-            $authenticator->authenticate($this->request('Bearer '.self::TOKEN));
+            $authenticator->authenticate($this->request('Bearer ' . self::TOKEN));
             self::fail('Limit wurde nicht angewendet.');
         } catch (ApiProblemException $e) {
             self::assertSame(429, $e->getStatus());
@@ -80,19 +80,27 @@ final class AdminTokenAuthenticatorTest extends TestCase
         }
     }
 
-    private function authenticator(string $adminToken, int $limit = 1000): AdminTokenAuthenticator
-    {
+    private function authenticator(
+        #[\SensitiveParameter]
+        string $adminToken,
+        int $limit = 1000,
+    ): AdminTokenAuthenticator {
         $clock = new MockClock('2026-01-01 12:00:00');
-        $limiter = new RateLimiterFactory(
-            ['id' => 'admin', 'policy' => 'sliding_window', 'limit' => $limit, 'interval' => '1 minute'],
-            new InMemoryStorage(),
-        );
+        $limiter = new RateLimiterFactory([
+            'id' => 'admin',
+            'policy' => 'sliding_window',
+            'limit' => $limit,
+            'interval' => '1 minute',
+        ], new InMemoryStorage());
 
         return new AdminTokenAuthenticator($limiter, new ProblemResponseFactory(), $clock, $adminToken);
     }
 
     private function request(string $authorization): Request
     {
-        return Request::create('/v1/admin/lists', server: ['HTTP_AUTHORIZATION' => $authorization, 'REMOTE_ADDR' => '203.0.113.9']);
+        return Request::create('/v1/admin/lists', server: [
+            'HTTP_AUTHORIZATION' => $authorization,
+            'REMOTE_ADDR' => '203.0.113.9',
+        ]);
     }
 }

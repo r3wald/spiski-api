@@ -125,7 +125,7 @@ final class SyncProtocolTest extends ApiTestCase
                 self::uuid(),
                 $listId,
                 \sprintf('2026-04-01T10:%02d:00.000Z', $i + 1),
-                'Artikel '.$i,
+                'Artikel ' . $i,
             );
         }
 

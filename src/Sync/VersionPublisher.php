@@ -80,7 +80,7 @@ final class VersionPublisher
             }
 
             $version = ++$this->counters[$userId];
-            $this->upserts[$userId."\0".$kind."\0".$rowId] = [$userId, $kind, $rowId, $version];
+            $this->upserts[$userId . "\0" . $kind . "\0" . $rowId] = [$userId, $kind, $rowId, $version];
             $versions[$userId] = $version;
         }
 
@@ -103,7 +103,7 @@ final class VersionPublisher
     /** Hebt eine fruehere Meldung `revoked` auf (erneuter Beitritt). */
     public function unrevoke(string $userId, string $listId): void
     {
-        unset($this->upserts[$userId."\0".SyncView::KIND_REVOKED."\0".$listId]);
+        unset($this->upserts[$userId . "\0" . SyncView::KIND_REVOKED . "\0" . $listId]);
         $this->removals[] = [$userId, SyncView::KIND_REVOKED, [$listId]];
     }
 
@@ -136,10 +136,10 @@ final class VersionPublisher
         }
 
         foreach ($this->counters as $userId => $counter) {
-            $connection->executeStatement(
-                'UPDATE app_user SET version_counter = :counter WHERE id = :id AND version_counter < :counter',
-                ['counter' => $counter, 'id' => $userId],
-            );
+            $connection->executeStatement('UPDATE app_user SET version_counter = :counter WHERE id = :id AND version_counter < :counter', [
+                'counter' => $counter,
+                'id' => $userId,
+            ]);
         }
 
         $this->upserts = [];
@@ -147,7 +147,11 @@ final class VersionPublisher
 
         return array_map(
             strval(...),
-            array_keys(array_filter($this->counters, fn (int $counter, string $userId): bool => $counter > $this->initial[$userId], \ARRAY_FILTER_USE_BOTH)),
+            array_keys(array_filter(
+                $this->counters,
+                fn(int $counter, string $userId): bool => $counter > $this->initial[$userId],
+                \ARRAY_FILTER_USE_BOTH,
+            )),
         );
     }
 }

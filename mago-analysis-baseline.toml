@@ -1,0 +1,391 @@
+variant = "loose"
+
+[[issues]]
+file = "public/index.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #1 of `Symfony\Component\DependencyInjection\Kernel\AbstractKernel::__construct`: expected `string`, but found `mixed`.'
+count = 1
+
+[[issues]]
+file = "public/index.php"
+code = "mixed-operand"
+message = "Casting `mixed` to `bool`."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminConfirmation.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "invalid-type-cast"
+message = "Casting `mixed` to `float`."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "redundant-docblock-type"
+message = "Redundant docblock type for variable `$row`."
+count = 2
+
+[[issues]]
+file = "src/Controller/AccountController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 1
+
+[[issues]]
+file = "src/Controller/EncryptionController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 12
+
+[[issues]]
+file = "src/Controller/EncryptionController.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 3
+
+[[issues]]
+file = "src/Controller/HealthController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 2
+
+[[issues]]
+file = "src/Controller/LiveController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 2
+
+[[issues]]
+file = "src/Controller/ShareController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 16
+
+[[issues]]
+file = "src/Controller/ShareController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\Schema` is deprecated and should no longer be used.'
+count = 5
+
+[[issues]]
+file = "src/Controller/ShareController.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 2
+
+[[issues]]
+file = "src/Controller/SyncController.php"
+code = "deprecated-class"
+message = 'Class `OpenApi\Attributes\JsonContent` is deprecated and should no longer be used.'
+count = 9
+
+[[issues]]
+file = "src/EventListener/ApiExceptionListener.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 1
+
+[[issues]]
+file = "src/Security/AdminTokenAuthenticator.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "src/Security/UuidBearerAuthenticator.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "src/Status/BuildInfo.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 3
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 15
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "mixed-assignment"
+message = "Assigning `nonnull` type to a variable may lead to unexpected behavior."
+count = 3
+
+[[issues]]
+file = "tests/Functional/AdminItemDeletionTest.php"
+code = "less-specific-return-statement"
+message = 'Returned type `array<array-key, null|string>` is less specific than the declared return type `array<string, null|string>` for function `App\Tests\Functional\AdminItemDeletionTest::recordedUpdates`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminItemDeletionTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, null|string>`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminItemDeletionTest.php"
+code = "redundant-docblock-type"
+message = "Redundant docblock type for variable `$updates`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminItemDeletionTest.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminListDeletionTest.php"
+code = "less-specific-return-statement"
+message = 'Returned type `array<array-key, null|string>` is less specific than the declared return type `array<string, null|string>` for function `App\Tests\Functional\AdminListDeletionTest::recordedUpdates`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminListDeletionTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, null|string>`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminListDeletionTest.php"
+code = "redundant-docblock-type"
+message = "Redundant docblock type for variable `$updates`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminListDeletionTest.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "invalid-iterator"
+message = "The expression provided to `foreach` is not iterable. It resolved to type `mixed`, which is not iterable."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "mixed-argument"
+message = "Invalid argument type for argument #1 of `array_column`: expected `array<array-key, array<string('name'), ('V.array_column() extends mixed)>|object>|list<array<string('name'), ('V.array_column() extends mixed)>|object>`, but found `mixed`."
+count = 2
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "mixed-argument"
+message = "Invalid argument type for argument #1 of `array_keys`: expected `array<('K.array_keys() extends array-key), ('V.array_keys() extends mixed)>`, but found `mixed`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #2 of `PHPUnit\Framework\Assert::assertArrayNotHasKey`: expected `ArrayAccess<array-key, mixed>|array<array-key, mixed>`, but found `mixed`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 13
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 2
+
+[[issues]]
+file = "tests/Functional/ConcurrencyTest.php"
+code = "redundant-docblock-type"
+message = "Redundant docblock type for variable `$versions`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/ConflictResolutionTest.php"
+code = "mixed-argument"
+message = "Invalid argument type for argument #1 of `DateTimeImmutable::__construct`: expected `string`, but found `mixed`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/ConflictResolutionTest.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 2
+
+[[issues]]
+file = "tests/Functional/ConflictResolutionTest.php"
+code = "possibly-null-array-access"
+message = "Cannot perform array access on possibly `null` value."
+count = 7
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 5
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 2
+
+[[issues]]
+file = "tests/Functional/HealthAndAuthTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/LiveTest.php"
+code = "less-specific-return-statement"
+message = 'Returned type `array<array-key, null|string>` is less specific than the declared return type `array<string, null|string>` for function `App\Tests\Functional\LiveTest::recorded`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/LiveTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, null|string>`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "invalid-iterator"
+message = "The expression provided to `foreach` is not iterable. It resolved to type `mixed`, which is not iterable."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #2 of `App\Tests\Functional\SharingTest::joinWithCode`: expected `string`, but found `mixed`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #2 of `PHPUnit\Framework\Assert::assertMatchesRegularExpression`: expected `string`, but found `mixed`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 9
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, true>`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 3
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "mixed-return-statement"
+message = 'Could not infer a precise return type for function `App\Tests\Functional\SharingTest::joinWithCode`. Saw type `mixed`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "possibly-null-argument"
+message = 'Argument #2 of method `PHPUnit\Framework\Assert::assertArrayHasKey` is possibly `null`, but parameter type `ArrayAccess<array-key, mixed>|array<array-key, mixed>` does not accept it.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "possibly-null-array-access"
+message = "Cannot perform array access on possibly `null` value."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "redundant-docblock-type"
+message = "Redundant docblock type for variable `$versions`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/StatusTest.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #2 of `PHPUnit\Framework\Assert::assertMatchesRegularExpression`: expected `string`, but found `mixed`.'
+count = 2
+
+[[issues]]
+file = "tests/Functional/StatusTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 7
+
+[[issues]]
+file = "tests/Functional/StatusTest.php"
+code = "mixed-operand"
+message = "Invalid middle operand: type `mixed` cannot be reliably used in string concatenation."
+count = 1
+
+[[issues]]
+file = "tests/Functional/StatusTest.php"
+code = "reference-to-undefined-variable"
+message = "Reference created from a previously undefined variable `$matches`."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "invalid-iterator"
+message = "The expression provided to `foreach` is not iterable. It resolved to type `mixed`, which is not iterable."
+count = 2
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-argument"
+message = "Invalid argument type for argument #1 of `count`: expected `Countable|array<array-key, mixed>`, but found `mixed`."
+count = 2
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-argument"
+message = 'Invalid argument type for argument #2 of `PHPUnit\Framework\Assert::assertCount`: expected `Countable|iterable<mixed, mixed>`, but found `mixed`.'
+count = 1
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-array-access"
+message = "Unsafe array access on type `mixed`."
+count = 10
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, int(1)|int(2)>`."
+count = 2
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-array-index"
+message = "Invalid index type `mixed` used in array assignment on `array<array-key, int(1)|int(2)|int(3)|int(4)|int(5)|int(6)|int(7)|int(8)>`."
+count = 2
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "mixed-assignment"
+message = "Assigning `mixed` type to a variable may lead to unexpected behavior."
+count = 3
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "possibly-null-array-access"
+message = "Cannot perform array access on possibly `null` value."
+count = 3

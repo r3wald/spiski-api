@@ -31,7 +31,11 @@ final class EncryptionPolicy
         try {
             $this->deadline = new \DateTimeImmutable($deadline, new \DateTimeZone('UTC'));
         } catch (\Exception $e) {
-            throw new \InvalidArgumentException(\sprintf('SPISKI_ENCRYPTION_DEADLINE ist kein Datum: "%s"', $deadline), 0, $e);
+            throw new \InvalidArgumentException(
+                \sprintf('SPISKI_ENCRYPTION_DEADLINE ist kein Datum: "%s"', $deadline),
+                0,
+                $e,
+            );
         }
     }
 

@@ -20,8 +20,7 @@ final class AccountController
         private readonly EntityManagerInterface $em,
         private readonly ShareService $shares,
         private readonly LiveUpdates $live,
-    ) {
-    }
+    ) {}
 
     /**
      * Recht auf Loeschung (CLAUDE.md 6).
@@ -32,30 +31,31 @@ final class AccountController
      * lastSyncCursor deshalb gleichzeitig lokal auf 0 zuruecksetzen.
      */
     #[Route('/v1/me', name: 'v1_me_delete', methods: ['DELETE'])]
-    #[OA\Delete(
-        summary: 'Alle Daten des Nutzers loeschen',
-        description: <<<'TEXT'
-            Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf
-            Loeschung). Mit anderen geteilte Listen verschwinden auch bei deren
-            Mitgliedern; aus fremden geteilten Listen tritt das Konto aus. Derselbe Bearer-Token legt beim naechsten Request einen
-            leeren Account an; der Client muss seinen `lastSyncCursor`
-            gleichzeitig lokal auf 0 zuruecksetzen.
-            TEXT,
-        tags: ['Account'],
-    )]
+    #[OA\Delete(summary: 'Alle Daten des Nutzers loeschen', description: <<<'TEXT'
+        Loescht Nutzer, Listen und Artikel unwiderruflich (Recht auf
+        Loeschung). Mit anderen geteilte Listen verschwinden auch bei deren
+        Mitgliedern; aus fremden geteilten Listen tritt das Konto aus. Derselbe Bearer-Token legt beim naechsten Request einen
+        leeren Account an; der Client muss seinen `lastSyncCursor`
+        gleichzeitig lokal auf 0 zuruecksetzen.
+        TEXT, tags: ['Account'])]
     #[OA\Response(response: 204, description: 'Geloescht')]
-    #[OA\Response(response: 401, description: 'Bearer-Token fehlt oder ist keine UUID', content: new OA\JsonContent(ref: '#/components/schemas/Problem'))]
+    #[OA\Response(
+        response: 401,
+        description: 'Bearer-Token fehlt oder ist keine UUID',
+        content: new OA\JsonContent(ref: '#/components/schemas/Problem'),
+    )]
     public function delete(#[CurrentUser] User $user): Response
     {
-        $this->live->around(fn () => $this->em->getConnection()->transactional(function (Connection $connection) use ($user): void {
-            // Mitglieder seiner geteilten Listen verlieren den Zugriff, aus
-            // fremden Listen tritt das Konto aus (CLAUDE.md 12).
-            $this->shares->detachAccount($connection, $user);
-            $connection->executeStatement(
-                'DELETE FROM app_user WHERE id = :id',
-                ['id' => $user->getId()->toRfc4122()],
-            );
-        }));
+        $this->live->around(fn() => $this->em
+            ->getConnection()
+            ->transactional(function (Connection $connection) use ($user): void {
+                // Mitglieder seiner geteilten Listen verlieren den Zugriff, aus
+                // fremden Listen tritt das Konto aus (CLAUDE.md 12).
+                $this->shares->detachAccount($connection, $user);
+                $connection->executeStatement('DELETE FROM app_user WHERE id = :id', [
+                    'id' => $user->getId()->toRfc4122(),
+                ]);
+            }));
 
         // Der geloeschte Nutzer haengt noch im Identity Map des EntityManagers.
         $this->em->clear();

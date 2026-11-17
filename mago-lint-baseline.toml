@@ -1,0 +1,397 @@
+variant = "loose"
+
+[[issues]]
+file = "public/index.php"
+code = "prefer-arrow-function"
+message = "This closure can be simplified to a more concise arrow function."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "halstead"
+message = "Method has a high halstead volume and effort"
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminListReader.php"
+code = "no-boolean-flag-parameter"
+message = "Avoid boolean flag parameters."
+count = 3
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "halstead"
+message = "Method has a high halstead volume and effort"
+count = 2
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "kan-defect"
+message = "Class has a high kan defect score."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "no-boolean-flag-parameter"
+message = "Avoid boolean flag parameters."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "no-isset"
+message = "Use of the `isset` construct."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 1
+
+[[issues]]
+file = "src/Admin/AdminPageRenderer.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "src/Command/PurgePlaintextCommand.php"
+code = "no-boolean-flag-parameter"
+message = "Avoid boolean flag parameters."
+count = 1
+
+[[issues]]
+file = "src/Controller/AdminController.php"
+code = "no-isset"
+message = "Use of the `isset` construct."
+count = 1
+
+[[issues]]
+file = "src/Controller/AdminController.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "src/Controller/EncryptionController.php"
+code = "no-boolean-flag-parameter"
+message = "Avoid boolean flag parameters."
+count = 1
+
+[[issues]]
+file = "src/Encryption/EncryptionService.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Entity/ShoppingItem.php"
+code = "too-many-properties"
+message = "Class has too many properties."
+count = 1
+
+[[issues]]
+file = "src/Entity/ShoppingList.php"
+code = "too-many-properties"
+message = "Class has too many properties."
+count = 1
+
+[[issues]]
+file = "src/EventListener/ApiExceptionListener.php"
+code = "prefer-early-continue"
+message = "Consider using early continue pattern to reduce nesting."
+count = 1
+
+[[issues]]
+file = "src/Exception/ApiProblemException.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "src/Sharing/ShareService.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "src/Sharing/ShareService.php"
+code = "kan-defect"
+message = "Class has a high kan defect score."
+count = 1
+
+[[issues]]
+file = "src/Sharing/ShareService.php"
+code = "no-else-clause"
+message = "Avoid `else` clauses."
+count = 2
+
+[[issues]]
+file = "src/Sharing/ShareService.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "src/Status/StatusPageRenderer.php"
+code = "halstead"
+message = "Method has a high halstead volume and effort"
+count = 1
+
+[[issues]]
+file = "src/Sync/Dto/ItemChange.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Sync/Dto/ListChange.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Sync/Dto/SyncRequest.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Sync/Dto/SyncResult.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncLimits.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 4
+
+[[issues]]
+file = "src/Sync/SyncLock.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "halstead"
+message = "Method has a high halstead effort"
+count = 2
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "kan-defect"
+message = "Class has a high kan defect score."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "no-else-clause"
+message = "Avoid `else` clauses."
+count = 2
+
+[[issues]]
+file = "src/Sync/SyncRequestParser.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "excessive-parameter-list"
+message = "Parameter list is too long."
+count = 4
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "halstead"
+message = "Method has a high halstead effort"
+count = 2
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "halstead"
+message = "Method has a high halstead volume and effort"
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "kan-defect"
+message = "Class has a high kan defect score."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "no-else-clause"
+message = "Avoid `else` clauses."
+count = 1
+
+[[issues]]
+file = "src/Sync/SyncService.php"
+code = "no-isset"
+message = "Use of the `isset` construct."
+count = 1
+
+[[issues]]
+file = "src/Sync/VersionPublisher.php"
+code = "no-isset"
+message = "Use of the `isset` construct."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminItemDeletionTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminListDeletionTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "inline-variable-return"
+message = "Variable assignment can be inlined into the return statement."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "strict-assertions"
+message = "Use strict assertions in PHPUnit tests."
+count = 1
+
+[[issues]]
+file = "tests/Functional/AdminTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/ApiTestCase.php"
+code = "inline-variable-return"
+message = "Variable assignment can be inlined into the return statement."
+count = 2
+
+[[issues]]
+file = "tests/Functional/ApiTestCase.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 1
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "halstead"
+message = "Method has a high halstead volume"
+count = 1
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "inline-variable-return"
+message = "Variable assignment can be inlined into the return statement."
+count = 2
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "no-boolean-flag-parameter"
+message = "Avoid boolean flag parameters."
+count = 2
+
+[[issues]]
+file = "tests/Functional/EncryptionTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/HealthAndAuthTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/LiveTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "cyclomatic-complexity"
+message = "Class has high complexity."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SharingTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Functional/StatusTest.php"
+code = "inline-variable-return"
+message = "Variable assignment can be inlined into the return statement."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "readable-literal"
+message = "Numeric literal could use underscore separators for readability."
+count = 1
+
+[[issues]]
+file = "tests/Functional/SyncProtocolTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1
+
+[[issues]]
+file = "tests/Unit/ConflictResolverTest.php"
+code = "too-many-methods"
+message = "Class has too many methods."
+count = 1

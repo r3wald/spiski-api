@@ -16,8 +16,7 @@ final class ListAudience
     public function __construct(
         public readonly string $owner,
         public readonly array $members = [],
-    ) {
-    }
+    ) {}
 
     /**
      * @return list<string>
@@ -50,6 +49,9 @@ final class ListAudience
 
     public function without(string $userId): self
     {
-        return new self($this->owner, array_values(array_filter($this->members, static fn (string $m): bool => $m !== $userId)));
+        return new self(
+            $this->owner,
+            array_values(array_filter($this->members, static fn(string $m): bool => $m !== $userId)),
+        );
     }
 }

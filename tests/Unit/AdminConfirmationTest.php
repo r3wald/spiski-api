@@ -32,17 +32,37 @@ final class AdminConfirmationTest extends TestCase
     {
         $token = $this->confirmation->issue('delete-item', self::ITEM, $this->now);
 
-        self::assertFalse($this->confirmation->isValid($token, 'delete-item', '00000000-0000-4000-8000-000000000000', $this->now));
+        self::assertFalse($this->confirmation->isValid(
+            $token,
+            'delete-item',
+            '00000000-0000-4000-8000-000000000000',
+            $this->now,
+        ));
         self::assertFalse($this->confirmation->isValid($token, 'delete-list', self::ITEM, $this->now));
-        self::assertFalse((new AdminConfirmation('other-secret'))->isValid($token, 'delete-item', self::ITEM, $this->now));
+        self::assertFalse(new AdminConfirmation('other-secret')->isValid(
+            $token,
+            'delete-item',
+            self::ITEM,
+            $this->now,
+        ));
     }
 
     public function testTokenExpires(): void
     {
         $token = $this->confirmation->issue('delete-item', self::ITEM, $this->now);
 
-        self::assertTrue($this->confirmation->isValid($token, 'delete-item', self::ITEM, $this->now->modify('+'.AdminConfirmation::LIFETIME.' seconds')));
-        self::assertFalse($this->confirmation->isValid($token, 'delete-item', self::ITEM, $this->now->modify('+'.(AdminConfirmation::LIFETIME + 1).' seconds')));
+        self::assertTrue($this->confirmation->isValid(
+            $token,
+            'delete-item',
+            self::ITEM,
+            $this->now->modify('+' . AdminConfirmation::LIFETIME . ' seconds'),
+        ));
+        self::assertFalse($this->confirmation->isValid(
+            $token,
+            'delete-item',
+            self::ITEM,
+            $this->now->modify('+' . (AdminConfirmation::LIFETIME + 1) . ' seconds'),
+        ));
     }
 
     public function testExtendingTheExpiryBreaksTheSignature(): void
@@ -50,12 +70,17 @@ final class AdminConfirmationTest extends TestCase
         $token = $this->confirmation->issue('delete-item', self::ITEM, $this->now);
         [, $signature] = explode('.', $token);
 
-        self::assertFalse($this->confirmation->isValid('9999999999.'.$signature, 'delete-item', self::ITEM, $this->now));
+        self::assertFalse($this->confirmation->isValid(
+            '9999999999.' . $signature,
+            'delete-item',
+            self::ITEM,
+            $this->now,
+        ));
     }
 
     public function testMalformedTokensAreRejected(): void
     {
-        foreach (['', 'abc', '123.', '.'.str_repeat('a', 64), '123.'.str_repeat('g', 64)] as $token) {
+        foreach (['', 'abc', '123.', '.' . str_repeat('a', 64), '123.' . str_repeat('g', 64)] as $token) {
             self::assertFalse($this->confirmation->isValid($token, 'delete-item', self::ITEM, $this->now), $token);
         }
     }

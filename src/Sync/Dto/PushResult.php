@@ -15,8 +15,7 @@ final class PushResult
         public readonly Uuid $id,
         public readonly bool $accepted,
         public readonly ?RejectReason $reason,
-    ) {
-    }
+    ) {}
 
     public static function accepted(Uuid $id): self
     {

@@ -37,8 +37,7 @@ final class UuidBearerAuthenticator extends AbstractAuthenticator implements Aut
         private readonly RateLimiterFactoryInterface $accountCreationLimiter,
         private readonly ProblemResponseFactory $problems,
         private readonly ClockInterface $clock,
-    ) {
-    }
+    ) {}
 
     public function supports(Request $request): bool
     {
@@ -47,10 +46,12 @@ final class UuidBearerAuthenticator extends AbstractAuthenticator implements Aut
 
     public function authenticate(Request $request): Passport
     {
-        $header = $request->headers->get('Authorization', '');
+        $header = $request->headers->get('Authorization') ?? '';
 
         if (1 !== preg_match('/^Bearer\s+(\S+)$/i', $header, $matches)) {
-            throw new CustomUserMessageAuthenticationException('Header "Authorization: Bearer <uuid>" fehlt oder ist unlesbar.');
+            throw new CustomUserMessageAuthenticationException(
+                'Header "Authorization: Bearer <uuid>" fehlt oder ist unlesbar.',
+            );
         }
 
         if (!Uuid::isValid($matches[1])) {
@@ -60,16 +61,18 @@ final class UuidBearerAuthenticator extends AbstractAuthenticator implements Aut
         $accountId = Uuid::fromString($matches[1]);
         $clientIp = $request->getClientIp() ?? 'unknown';
 
-        return new SelfValidatingPassport(
-            new UserBadge(
-                $accountId->toRfc4122(),
-                fn (): User => $this->loadOrCreate($accountId, $clientIp),
-            ),
-        );
+        return new SelfValidatingPassport(new UserBadge($accountId->toRfc4122(), fn(): User => $this->loadOrCreate(
+            $accountId,
+            $clientIp,
+        )));
     }
 
-    public function onAuthenticationSuccess(Request $request, TokenInterface $token, string $firewallName): ?Response
-    {
+    public function onAuthenticationSuccess(
+        Request $request,
+        #[\SensitiveParameter]
+        TokenInterface $token,
+        string $firewallName,
+    ): ?Response {
         return null;
     }
 
@@ -82,16 +85,12 @@ final class UuidBearerAuthenticator extends AbstractAuthenticator implements Aut
             return $this->problems->fromException($previous);
         }
 
-        return $this->problems->fromException(
-            ApiProblemException::unauthorized($exception->getMessageKey()),
-        );
+        return $this->problems->fromException(ApiProblemException::unauthorized($exception->getMessageKey()));
     }
 
     public function start(Request $request, ?AuthenticationException $authException = null): Response
     {
-        return $this->problems->fromException(
-            ApiProblemException::unauthorized('Authentifizierung erforderlich.'),
-        );
+        return $this->problems->fromException(ApiProblemException::unauthorized('Authentifizierung erforderlich.'));
     }
 
     private function loadOrCreate(Uuid $accountId, string $clientIp): User

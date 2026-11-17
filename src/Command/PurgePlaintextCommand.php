@@ -35,15 +35,17 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * Danach haelt PostgreSQL den Klartext noch in toten Tupeln: `VACUUM FULL`
  * im Wartungsfenster (README).
  */
-#[AsCommand(name: 'app:purge-plaintext', description: 'Loescht nach Ablauf der Frist den Klartext nicht umgestellter Konten')]
+#[AsCommand(
+    name: 'app:purge-plaintext',
+    description: 'Loescht nach Ablauf der Frist den Klartext nicht umgestellter Konten',
+)]
 final class PurgePlaintextCommand
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly SyncLock $lock,
         private readonly EncryptionPolicy $encryption,
-    ) {
-    }
+    ) {}
 
     public function __invoke(
         SymfonyStyle $io,
@@ -68,7 +70,7 @@ final class PurgePlaintextCommand
             $this->lock->exclusive($connection);
 
             $counts = $this->count($connection);
-            if (!$dryRun && $counts['lists'] + $counts['items'] > 0) {
+            if (!$dryRun && ($counts['lists'] + $counts['items']) > 0) {
                 $this->purge($connection);
             }
 
@@ -76,7 +78,11 @@ final class PurgePlaintextCommand
         });
 
         $io->table(['Konten', 'Listen', 'Artikel'], [[$counts['accounts'], $counts['lists'], $counts['items']]]);
-        $io->success($dryRun ? 'Probelauf: nichts geloescht.' : 'Klartext geloescht. Danach im Wartungsfenster VACUUM FULL (README).');
+        $io->success(
+            $dryRun
+                ? 'Probelauf: nichts geloescht.'
+                : 'Klartext geloescht. Danach im Wartungsfenster VACUUM FULL (README).',
+        );
 
         return Command::SUCCESS;
     }
@@ -106,22 +112,16 @@ final class PurgePlaintextCommand
 
         // Zuerst die Sicht aller Konten (auch der Mitglieder), sonst zeigte sie
         // auf geloeschte Zeilen. Artikel gehoeren immer dem Besitzer der Liste.
-        $connection->executeStatement(
-            <<<'SQL'
-                DELETE FROM sync_view sv
-                USING shopping_item i, app_user u
-                WHERE sv.kind = 'item' AND sv.row_id = i.id AND i.user_id = u.id AND u.encryption_state = :state
-                SQL,
-            $params,
-        );
-        $connection->executeStatement(
-            <<<'SQL'
-                DELETE FROM sync_view sv
-                USING shopping_list l, app_user u
-                WHERE sv.kind = 'list' AND sv.row_id = l.id AND l.user_id = u.id AND u.encryption_state = :state
-                SQL,
-            $params,
-        );
+        $connection->executeStatement(<<<'SQL'
+            DELETE FROM sync_view sv
+            USING shopping_item i, app_user u
+            WHERE sv.kind = 'item' AND sv.row_id = i.id AND i.user_id = u.id AND u.encryption_state = :state
+            SQL, $params);
+        $connection->executeStatement(<<<'SQL'
+            DELETE FROM sync_view sv
+            USING shopping_list l, app_user u
+            WHERE sv.kind = 'list' AND sv.row_id = l.id AND l.user_id = u.id AND u.encryption_state = :state
+            SQL, $params);
         $connection->executeStatement(
             'DELETE FROM shopping_item WHERE user_id IN (SELECT id FROM app_user WHERE encryption_state = :state)',
             $params,

@@ -54,32 +54,32 @@ final class ApiProblemException extends \RuntimeException
 
     public static function badRequest(string $detail): self
     {
-        return new self(400, self::TYPE_BASE.'malformed-request', 'Bad Request', $detail);
+        return new self(400, self::TYPE_BASE . 'malformed-request', 'Bad Request', $detail);
     }
 
     public static function unauthorized(string $detail): self
     {
-        return new self(401, self::TYPE_BASE.'invalid-token', 'Unauthorized', $detail);
+        return new self(401, self::TYPE_BASE . 'invalid-token', 'Unauthorized', $detail);
     }
 
     public static function payloadTooLarge(string $detail): self
     {
-        return new self(413, self::TYPE_BASE.'payload-too-large', 'Payload Too Large', $detail);
+        return new self(413, self::TYPE_BASE . 'payload-too-large', 'Payload Too Large', $detail);
     }
 
     public static function forbidden(string $detail): self
     {
-        return new self(403, self::TYPE_BASE.'forbidden', 'Forbidden', $detail);
+        return new self(403, self::TYPE_BASE . 'forbidden', 'Forbidden', $detail);
     }
 
     public static function notFound(string $detail): self
     {
-        return new self(404, self::TYPE_BASE.'not-found', 'Not Found', $detail);
+        return new self(404, self::TYPE_BASE . 'not-found', 'Not Found', $detail);
     }
 
     public static function conflict(string $detail): self
     {
-        return new self(409, self::TYPE_BASE.'conflict', 'Conflict', $detail);
+        return new self(409, self::TYPE_BASE . 'conflict', 'Conflict', $detail);
     }
 
     /**
@@ -88,12 +88,12 @@ final class ApiProblemException extends \RuntimeException
      */
     public static function retryLater(string $detail): self
     {
-        return new self(503, self::TYPE_BASE.'retry-later', 'Service Unavailable', $detail, ['Retry-After' => '1']);
+        return new self(503, self::TYPE_BASE . 'retry-later', 'Service Unavailable', $detail, ['Retry-After' => '1']);
     }
 
     public static function unprocessable(string $detail): self
     {
-        return new self(422, self::TYPE_BASE.'out-of-range', 'Unprocessable Content', $detail);
+        return new self(422, self::TYPE_BASE . 'out-of-range', 'Unprocessable Content', $detail);
     }
 
     /**
@@ -103,25 +103,25 @@ final class ApiProblemException extends \RuntimeException
      */
     public static function upgradeRequired(string $detail): self
     {
-        return new self(426, self::TYPE_BASE.'upgrade-required', 'Upgrade Required', $detail);
+        return new self(426, self::TYPE_BASE . 'upgrade-required', 'Upgrade Required', $detail);
     }
 
     /** Ein anderes Geraet desselben Kontos stellt gerade auf Verschluesselung um. */
     public static function migrationInProgress(string $detail): self
     {
-        return new self(409, self::TYPE_BASE.'migration-in-progress', 'Conflict', $detail);
+        return new self(409, self::TYPE_BASE . 'migration-in-progress', 'Conflict', $detail);
     }
 
     /** Das Konto ist schon verschluesselt; dieses Geraet braucht den Konto-Code. */
     public static function alreadyEncrypted(string $detail): self
     {
-        return new self(409, self::TYPE_BASE.'already-encrypted', 'Conflict', $detail);
+        return new self(409, self::TYPE_BASE . 'already-encrypted', 'Conflict', $detail);
     }
 
     /** `commit`, obwohl noch Klartext-Zeilen auf dem Server liegen. */
     public static function encryptionIncomplete(string $detail): self
     {
-        return new self(409, self::TYPE_BASE.'encryption-incomplete', 'Conflict', $detail);
+        return new self(409, self::TYPE_BASE . 'encryption-incomplete', 'Conflict', $detail);
     }
 
     /**
@@ -130,14 +130,14 @@ final class ApiProblemException extends \RuntimeException
      */
     public static function encryptionRequired(string $detail): self
     {
-        return new self(409, self::TYPE_BASE.'encryption-required', 'Conflict', $detail);
+        return new self(409, self::TYPE_BASE . 'encryption-required', 'Conflict', $detail);
     }
 
     public static function tooManyRequests(string $detail, int $retryAfterSeconds): self
     {
         return new self(
             429,
-            self::TYPE_BASE.'rate-limited',
+            self::TYPE_BASE . 'rate-limited',
             'Too Many Requests',
             $detail,
             ['Retry-After' => (string) max(1, $retryAfterSeconds)],

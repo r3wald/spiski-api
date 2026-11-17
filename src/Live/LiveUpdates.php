@@ -31,14 +31,14 @@ final class LiveUpdates
     public function __construct(
         private readonly HubInterface $hub,
         private readonly LoggerInterface $logger,
+        #[\SensitiveParameter]
         #[Autowire('%kernel.secret%')]
         private readonly string $secret,
         #[Autowire('%spiski.mercure.issuer%')]
         private readonly string $issuer,
         #[Autowire('%spiski.mercure.audience%')]
         private readonly string $audience,
-    ) {
-    }
+    ) {}
 
     /**
      * Topic eines Kontos. Die Konto-ID ist das Secret und darf weder im Topic
@@ -46,7 +46,7 @@ final class LiveUpdates
      */
     public function topicFor(string $userId): string
     {
-        return 'urn:spiski:account:'.hash_hmac('sha256', strtolower($userId), $this->secret);
+        return 'urn:spiski:account:' . hash_hmac('sha256', strtolower($userId), $this->secret);
     }
 
     /** Abo-Token, das genau das Topic des Kontos lesen darf. */
@@ -54,16 +54,13 @@ final class LiveUpdates
     {
         $factory = $this->hub->getFactory() ?? throw new \LogicException('Mercure-Hub ohne Token-Factory.');
 
-        return $factory->create(
-            [new Grant([Grant::ACTION_SUBSCRIBE], [$this->topicFor($userId)])],
-            [
-                'iss' => $this->issuer,
-                'aud' => $this->audience,
-                'sub' => 'spiski-app',
-                'client_id' => 'spiski-app',
-                'exp' => $now->modify('+'.self::TOKEN_LIFETIME.' seconds'),
-            ],
-        );
+        return $factory->create([new Grant([Grant::ACTION_SUBSCRIBE], [$this->topicFor($userId)])], [
+            'iss' => $this->issuer,
+            'aud' => $this->audience,
+            'sub' => 'spiski-app',
+            'client_id' => 'spiski-app',
+            'exp' => $now->modify('+' . self::TOKEN_LIFETIME . ' seconds'),
+        ]);
     }
 
     /**
@@ -94,11 +91,13 @@ final class LiveUpdates
 
         foreach ($pending as $userId => $origin) {
             try {
-                $this->hub->publish(new Update(
-                    $this->topicFor($userId),
-                    json_encode(['origin' => $origin], \JSON_THROW_ON_ERROR),
-                    private: true,
-                ));
+                $this->hub->publish(
+                    new Update(
+                        $this->topicFor($userId),
+                        json_encode(['origin' => $origin], \JSON_THROW_ON_ERROR),
+                        private: true,
+                    ),
+                );
             } catch (\Throwable $e) {
                 // Ohne Konto-ID im Log (CLAUDE.md 6).
                 $this->logger->warning('Mercure-Update fehlgeschlagen: {message}', ['message' => $e->getMessage()]);

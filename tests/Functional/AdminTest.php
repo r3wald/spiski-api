@@ -22,14 +22,14 @@ final class AdminTest extends ApiTestCase
 
     public function testWrongTokenIsUnauthorized(): void
     {
-        $this->adminRequest('/v1/admin/lists', 'Bearer '.self::ADMIN_TOKEN.'x');
+        $this->adminRequest('/v1/admin/lists', 'Bearer ' . self::ADMIN_TOKEN . 'x');
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
     }
 
     public function testNonBearerSchemeIsUnauthorized(): void
     {
-        $this->adminRequest('/v1/admin/lists', 'Basic '.self::ADMIN_TOKEN);
+        $this->adminRequest('/v1/admin/lists', 'Basic ' . self::ADMIN_TOKEN);
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
     }
@@ -40,7 +40,7 @@ final class AdminTest extends ApiTestCase
         $account = self::uuid();
         $this->sync($account, ['since' => 0, 'clientId' => self::uuid()]);
 
-        $this->adminRequest('/v1/admin/lists', 'Bearer '.$account);
+        $this->adminRequest('/v1/admin/lists', 'Bearer ' . $account);
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
     }
@@ -51,8 +51,8 @@ final class AdminTest extends ApiTestCase
         $this->client->request(
             'POST',
             '/v1/sync',
-            server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::ADMIN_TOKEN],
-            content: '{"since":0,"clientId":"'.self::uuid().'"}',
+            server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN],
+            content: '{"since":0,"clientId":"' . self::uuid() . '"}',
         );
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
@@ -92,7 +92,11 @@ final class AdminTest extends ApiTestCase
         $raw = (string) $this->client->getResponse()->getContent();
         self::assertStringNotContainsString($accountA, $raw);
         self::assertStringNotContainsString($accountB, $raw);
-        self::assertStringNotContainsString(hash('sha256', $accountA), $raw, 'Nur das gekuerzte Kuerzel, nicht der volle Hash.');
+        self::assertStringNotContainsString(
+            hash('sha256', $accountA),
+            $raw,
+            'Nur das gekuerzte Kuerzel, nicht der volle Hash.',
+        );
     }
 
     public function testResponseIsNotCacheable(): void
@@ -143,7 +147,7 @@ final class AdminTest extends ApiTestCase
     #[DataProvider('invalidParameters')]
     public function testInvalidParametersAreUnprocessable(string $query): void
     {
-        $this->adminRequest('/v1/admin/lists?'.$query, 'Bearer '.self::ADMIN_TOKEN);
+        $this->adminRequest('/v1/admin/lists?' . $query, 'Bearer ' . self::ADMIN_TOKEN);
 
         self::assertSame(422, $this->client->getResponse()->getStatusCode());
     }
@@ -178,7 +182,7 @@ final class AdminTest extends ApiTestCase
 
     public function testPageWithWrongTokenIsUnauthorized(): void
     {
-        $this->adminRequest('/admin', 'Bearer '.self::ADMIN_TOKEN.'x');
+        $this->adminRequest('/admin', 'Bearer ' . self::ADMIN_TOKEN . 'x');
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
     }
@@ -186,7 +190,7 @@ final class AdminTest extends ApiTestCase
     public function testTokenInTheQueryStringIsNotAccepted(): void
     {
         // Das Token gehoert in den Header: in einer URL landet es in Logs und im Browserverlauf.
-        $this->client->request('GET', '/admin?token='.self::ADMIN_TOKEN.'&access_token='.self::ADMIN_TOKEN);
+        $this->client->request('GET', '/admin?token=' . self::ADMIN_TOKEN . '&access_token=' . self::ADMIN_TOKEN);
 
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
     }
@@ -210,16 +214,22 @@ final class AdminTest extends ApiTestCase
         self::assertStringNotContainsString($accountB, $html);
         self::assertStringNotContainsString(self::ADMIN_TOKEN, $html, 'Das Token darf nie in der Seite stehen.');
 
-        self::assertStringContainsString("default-src 'none'", (string) $response->headers->get('Content-Security-Policy'));
+        self::assertStringContainsString(
+            "default-src 'none'",
+            (string) $response->headers->get('Content-Security-Policy'),
+        );
         self::assertStringNotContainsString('script-src', (string) $response->headers->get('Content-Security-Policy'));
         self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
         self::assertSame('no-referrer', $response->headers->get('Referrer-Policy'));
-        self::assertFalse($response->headers->has('Set-Cookie'), 'Die Seite ist zustandslos: keine Session, kein Cookie.');
+        self::assertFalse(
+            $response->headers->has('Set-Cookie'),
+            'Die Seite ist zustandslos: keine Session, kein Cookie.',
+        );
     }
 
     public function testTrailingSlashRedirectsToThePage(): void
     {
-        $this->adminRequest('/admin/', 'Bearer '.self::ADMIN_TOKEN);
+        $this->adminRequest('/admin/', 'Bearer ' . self::ADMIN_TOKEN);
 
         $response = $this->client->getResponse();
         self::assertSame(301, $response->getStatusCode());
@@ -228,7 +238,7 @@ final class AdminTest extends ApiTestCase
 
     public function testArrayQueryParameterIsABadRequest(): void
     {
-        $this->adminRequest('/admin?q[]=x', 'Bearer '.self::ADMIN_TOKEN);
+        $this->adminRequest('/admin?q[]=x', 'Bearer ' . self::ADMIN_TOKEN);
 
         self::assertSame(400, $this->client->getResponse()->getStatusCode());
     }
@@ -238,7 +248,11 @@ final class AdminTest extends ApiTestCase
         $this->sync(self::uuid(), [
             'since' => 0,
             'clientId' => self::uuid(),
-            'changes' => ['lists' => [self::listRow(self::uuid(), '2026-03-01T10:00:00.000Z', '<script>alert(1)</script>"\'&')]],
+            'changes' => ['lists' => [self::listRow(
+                self::uuid(),
+                '2026-03-01T10:00:00.000Z',
+                '<script>alert(1)</script>"\'&',
+            )]],
         ]);
 
         $html = $this->getPage('/admin');
@@ -263,7 +277,7 @@ final class AdminTest extends ApiTestCase
         $this->seed();
         $owner = (string) $this->getLists()['lists'][0]['owner']; // Drogerie gehoert Account B
 
-        $body = $this->getLists('q='.substr($owner, 0, 6));
+        $body = $this->getLists('q=' . substr($owner, 0, 6));
 
         self::assertSame(1, $body['total']);
         /** @var list<array<string, mixed>> $lists */
@@ -306,8 +320,8 @@ final class AdminTest extends ApiTestCase
 
     public function testPageRejectsInvalidParameters(): void
     {
-        foreach (['limit=0', 'limit=501', 'offset=-1', 'q='.str_repeat('a', 101)] as $query) {
-            $this->adminRequest('/admin?'.$query, 'Bearer '.self::ADMIN_TOKEN);
+        foreach (['limit=0', 'limit=501', 'offset=-1', 'q=' . str_repeat('a', 101)] as $query) {
+            $this->adminRequest('/admin?' . $query, 'Bearer ' . self::ADMIN_TOKEN);
             self::assertSame(422, $this->client->getResponse()->getStatusCode(), $query);
         }
     }
@@ -362,7 +376,13 @@ final class AdminTest extends ApiTestCase
             'clientId' => self::uuid(),
             'changes' => [
                 'lists' => [self::listRow($list, '2026-03-01T10:00:00.000Z', 'Leergut')],
-                'items' => [self::itemRow(self::uuid(), $list, '2026-03-01T10:00:01.000Z', 'Flaschen', '2026-03-01T10:00:01.000Z')],
+                'items' => [self::itemRow(
+                    self::uuid(),
+                    $list,
+                    '2026-03-01T10:00:01.000Z',
+                    'Flaschen',
+                    '2026-03-01T10:00:01.000Z',
+                )],
             ],
         ]);
 
@@ -406,10 +426,16 @@ final class AdminTest extends ApiTestCase
                 'lists' => [self::listRow($list, '2026-03-01T10:00:00.000Z', 'Backen')],
                 'items' => [
                     array_merge(self::itemRow(self::uuid(), $list, '2026-03-01T10:00:01.000Z', 'Mehl'), [
-                        'sortOrder' => 2, 'quantity' => 0.5, 'unit' => 'kg', 'isChecked' => true, 'note' => 'Typ 405',
+                        'sortOrder' => 2,
+                        'quantity' => 0.5,
+                        'unit' => 'kg',
+                        'isChecked' => true,
+                        'note' => 'Typ 405',
                     ]),
                     array_merge(self::itemRow(self::uuid(), $list, '2026-03-01T10:00:02.000Z', 'Zucker'), [
-                        'sortOrder' => 1, 'quantity' => 2.0, 'unit' => null,
+                        'sortOrder' => 1,
+                        'quantity' => 2.0,
+                        'unit' => null,
                     ]),
                 ],
             ],
@@ -444,7 +470,11 @@ final class AdminTest extends ApiTestCase
         }
 
         $byName = $this->listsByName($this->getLists('includeItems=1'));
-        self::assertSame(['Milch'], array_column($byName['Wocheneinkauf']['items'], 'name'), 'Archivierte standardmaessig nicht');
+        self::assertSame(
+            ['Milch'],
+            array_column($byName['Wocheneinkauf']['items'], 'name'),
+            'Archivierte standardmaessig nicht',
+        );
         self::assertSame([], $byName['Drogerie']['items'], 'Eintraege bleiben bei ihrer Liste.');
         self::assertSame([], $byName['Altlast']['items']);
 
@@ -456,7 +486,23 @@ final class AdminTest extends ApiTestCase
         self::assertEquals(1.0, $items[0]['quantity'], 'JSON kennt nur number: 1.0 kommt als 1 an.');
         self::assertSame('St', $items[0]['unit']);
         self::assertFalse($items[0]['isChecked']);
-        self::assertSame(['id', 'encrypted', 'name', 'quantity', 'unit', 'isChecked', 'note', 'sortOrder', 'createdAt', 'updatedAt', 'deletedAt', 'movedAt'], array_keys($items[0]));
+        self::assertSame(
+            [
+                'id',
+                'encrypted',
+                'name',
+                'quantity',
+                'unit',
+                'isChecked',
+                'note',
+                'sortOrder',
+                'createdAt',
+                'updatedAt',
+                'deletedAt',
+                'movedAt',
+            ],
+            array_keys($items[0]),
+        );
     }
 
     public function testItemsDoNotExposeAccountIdentifiers(): void
@@ -488,7 +534,10 @@ final class AdminTest extends ApiTestCase
         self::assertSame(1, $shared['activeItemCount']);
 
         $prepared = $lists['Drogerie'];
-        self::assertFalse($prepared['shared'], 'Ein Code ohne Mitglied ist noch nicht geteilt (wie auf der Statusseite).');
+        self::assertFalse(
+            $prepared['shared'],
+            'Ein Code ohne Mitglied ist noch nicht geteilt (wie auf der Statusseite).',
+        );
         self::assertSame(0, $prepared['memberCount']);
         self::assertSame(1, $prepared['userCount']);
         self::assertTrue($prepared['shareCodeActive']);
@@ -502,7 +551,11 @@ final class AdminTest extends ApiTestCase
     public function testPageShowsTheSharingState(): void
     {
         $this->seed();
-        $this->share($this->accountOfList('Wocheneinkauf'), $this->listId('Wocheneinkauf'), [self::uuid(), self::uuid()]);
+        $this->share(
+            $this->accountOfList('Wocheneinkauf'),
+            $this->listId('Wocheneinkauf'),
+            [self::uuid(), self::uuid()],
+        );
         $this->share($this->accountOfList('Drogerie'), $this->listId('Drogerie'), []);
 
         $html = $this->getPage('/admin');
@@ -534,7 +587,9 @@ final class AdminTest extends ApiTestCase
         $listId = $this->listId('Wocheneinkauf');
         $this->share($owner, $listId, [self::uuid()]);
 
-        $this->client->request('DELETE', '/v1/lists/'.$listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$owner]);
+        $this->client->request('DELETE', '/v1/lists/' . $listId . '/share', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $owner,
+        ]);
         self::assertSame(204, $this->client->getResponse()->getStatusCode());
 
         $list = $this->listsByName($this->getLists())['Wocheneinkauf'];
@@ -584,7 +639,13 @@ final class AdminTest extends ApiTestCase
                     self::itemRow(self::uuid(), $einkauf, '2026-02-01T10:00:01.000Z', 'Milch'),
                     // Spaeteres createdAt: bei gleicher sortOrder entscheidet sonst die zufaellige UUID.
                     array_merge(
-                        self::itemRow(self::uuid(), $einkauf, '2026-02-01T10:00:02.000Z', 'Brot', '2026-02-01T10:00:02.000Z'),
+                        self::itemRow(
+                            self::uuid(),
+                            $einkauf,
+                            '2026-02-01T10:00:02.000Z',
+                            'Brot',
+                            '2026-02-01T10:00:02.000Z',
+                        ),
                         ['createdAt' => '2026-01-02T00:00:00.000Z'],
                     ),
                 ],
@@ -605,7 +666,7 @@ final class AdminTest extends ApiTestCase
      */
     private function getLists(string $query = ''): array
     {
-        $this->adminRequest('/v1/admin/lists'.('' === $query ? '' : '?'.$query), 'Bearer '.self::ADMIN_TOKEN);
+        $this->adminRequest('/v1/admin/lists' . ('' === $query ? '' : '?' . $query), 'Bearer ' . self::ADMIN_TOKEN);
 
         $response = $this->client->getResponse();
         self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
@@ -640,15 +701,27 @@ final class AdminTest extends ApiTestCase
      */
     private function share(string $owner, string $listId, array $members): string
     {
-        $this->client->request('POST', '/v1/lists/'.$listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$owner]);
-        self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+        $this->client->request('POST', '/v1/lists/' . $listId . '/share', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $owner,
+        ]);
+        self::assertSame(
+            200,
+            $this->client->getResponse()->getStatusCode(),
+            (string) $this->client->getResponse()->getContent(),
+        );
         /** @var array{code: string} $share */
         $share = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
 
         foreach ($members as $member) {
             $this->sync($member, ['since' => 0, 'clientId' => self::uuid()]);
-            $this->client->request('POST', '/v1/shares/'.$share['code'], server: ['HTTP_AUTHORIZATION' => 'Bearer '.$member]);
-            self::assertSame(200, $this->client->getResponse()->getStatusCode(), (string) $this->client->getResponse()->getContent());
+            $this->client->request('POST', '/v1/shares/' . $share['code'], server: [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $member,
+            ]);
+            self::assertSame(
+                200,
+                $this->client->getResponse()->getStatusCode(),
+                (string) $this->client->getResponse()->getContent(),
+            );
         }
 
         return $share['code'];
@@ -656,17 +729,21 @@ final class AdminTest extends ApiTestCase
 
     private function listId(string $name): string
     {
-        return (string) $this->connection()->fetchOne('SELECT id FROM shopping_list WHERE name = :name', ['name' => $name]);
+        return (string) $this->connection()->fetchOne('SELECT id FROM shopping_list WHERE name = :name', [
+            'name' => $name,
+        ]);
     }
 
     private function accountOfList(string $name): string
     {
-        return (string) $this->connection()->fetchOne('SELECT user_id FROM shopping_list WHERE name = :name', ['name' => $name]);
+        return (string) $this->connection()->fetchOne('SELECT user_id FROM shopping_list WHERE name = :name', [
+            'name' => $name,
+        ]);
     }
 
     private function getPage(string $uri): string
     {
-        $this->adminRequest($uri, 'Bearer '.self::ADMIN_TOKEN);
+        $this->adminRequest($uri, 'Bearer ' . self::ADMIN_TOKEN);
 
         $response = $this->client->getResponse();
         self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());

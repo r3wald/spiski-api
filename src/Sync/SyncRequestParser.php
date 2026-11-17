@@ -32,8 +32,7 @@ final class SyncRequestParser
 
     public function __construct(
         private readonly ClockSkewGuard $clockSkewGuard,
-    ) {
-    }
+    ) {}
 
     public function parse(string $body, \DateTimeImmutable $now): SyncRequest
     {
@@ -48,7 +47,7 @@ final class SyncRequestParser
             /** @var mixed $decoded */
             $decoded = json_decode($body, true, 32, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            throw ApiProblemException::badRequest('Request-Body ist kein gueltiges JSON: '.$e->getMessage());
+            throw ApiProblemException::badRequest('Request-Body ist kein gueltiges JSON: ' . $e->getMessage());
         }
 
         if (!\is_array($decoded)) {
@@ -155,7 +154,7 @@ final class SyncRequestParser
             if (!CipherFormat::isEnc($enc) || !CipherFormat::isShort($wrappedKey) || !$this->isAbsent($row, 'name')) {
                 return null;
             }
-            \assert(\is_string($enc) && \is_string($wrappedKey));
+            \assert(\is_string($enc) && \is_string($wrappedKey), 'Von CipherFormat::isEnc()/isShort() oben geprueft.');
             $name = null;
         } else {
             if (null !== $wrappedKey) {
@@ -228,7 +227,7 @@ final class SyncRequestParser
                     return null;
                 }
             }
-            \assert(\is_string($enc));
+            \assert(\is_string($enc), 'Von CipherFormat::isEnc() oben geprueft.');
             $name = null;
             $quantity = null;
             $unit = null;
@@ -373,7 +372,11 @@ final class SyncRequestParser
     {
         $value = $row['id'] ?? null;
         if (!\is_string($value) || !Uuid::isValid($value)) {
-            throw ApiProblemException::badRequest(\sprintf('"%s[%d].id" fehlt oder ist keine gueltige UUID.', $path, $index));
+            throw ApiProblemException::badRequest(\sprintf(
+                '"%s[%d].id" fehlt oder ist keine gueltige UUID.',
+                $path,
+                $index,
+            ));
         }
 
         return Uuid::fromString($value);
@@ -410,7 +413,7 @@ final class SyncRequestParser
         }
 
         try {
-            return (new \DateTimeImmutable($value))->setTimezone(new \DateTimeZone('UTC'));
+            return new \DateTimeImmutable($value)->setTimezone(new \DateTimeZone('UTC'));
         } catch (\Exception) {
             return null;
         }
@@ -437,7 +440,7 @@ final class SyncRequestParser
      *
      * @return string|null|false false = gesetzt, aber ungueltig
      */
-    private function nullableBoundedString(array $row, string $key, int $maxLength): string|null|false
+    private function nullableBoundedString(array $row, string $key, int $maxLength): string|false|null
     {
         $value = $row[$key] ?? null;
         if (null === $value) {

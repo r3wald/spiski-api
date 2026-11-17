@@ -218,7 +218,7 @@ final class ConflictResolutionTest extends ApiTestCase
         $account = self::uuid();
         $listId = self::uuid();
 
-        $future = (new \DateTimeImmutable('+1 day'))->format('Y-m-d\TH:i:s.v\Z');
+        $future = new \DateTimeImmutable('+1 day')->format('Y-m-d\TH:i:s.v\Z');
 
         $response = $this->sync($account, [
             'since' => 0,

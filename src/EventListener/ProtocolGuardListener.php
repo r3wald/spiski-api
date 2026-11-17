@@ -33,8 +33,7 @@ final class ProtocolGuardListener
     public function __construct(
         private readonly Security $security,
         private readonly EncryptionPolicy $encryption,
-    ) {
-    }
+    ) {}
 
     public function __invoke(RequestEvent $event): void
     {

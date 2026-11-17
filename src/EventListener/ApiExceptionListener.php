@@ -25,13 +25,16 @@ final class ApiExceptionListener
     public function __construct(
         private readonly ProblemResponseFactory $problems,
         private readonly bool $debug,
-    ) {
-    }
+    ) {}
 
     public function __invoke(ExceptionEvent $event): void
     {
         $path = $event->getRequest()->getPathInfo();
-        if (!str_starts_with($path, '/v1') && !str_starts_with($path, '/admin') && !str_starts_with($path, '/status.')) {
+        if (
+            !str_starts_with($path, '/v1')
+            && !str_starts_with($path, '/admin')
+            && !str_starts_with($path, '/status.')
+        ) {
             return;
         }
 
@@ -49,13 +52,13 @@ final class ApiExceptionListener
             $headers = [];
             foreach ($throwable->getHeaders() as $name => $value) {
                 if (\is_string($value)) {
-                    $headers[$name] = $value;
+                    $headers[(string) $name] = $value;
                 }
             }
 
             $event->setResponse($this->problems->create(
                 $status,
-                self::TYPE_BASE.'http-error',
+                self::TYPE_BASE . 'http-error',
                 $this->titleFor($status),
                 $throwable->getMessage(),
                 $headers,
@@ -69,11 +72,9 @@ final class ApiExceptionListener
         // Ursache dagegen sichtbar, sonst ist das API-Backend kaum zu debuggen.
         $event->setResponse($this->problems->create(
             500,
-            self::TYPE_BASE.'internal-error',
+            self::TYPE_BASE . 'internal-error',
             'Internal Server Error',
-            $this->debug
-                ? \sprintf('%s: %s', $throwable::class, $throwable->getMessage())
-                : 'Unerwarteter Fehler.',
+            $this->debug ? \sprintf('%s: %s', $throwable::class, $throwable->getMessage()) : 'Unerwarteter Fehler.',
         ));
     }
 

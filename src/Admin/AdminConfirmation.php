@@ -22,34 +22,42 @@ final class AdminConfirmation
     public const LIFETIME = 3600;
 
     public function __construct(
+        #[\SensitiveParameter]
         #[Autowire('%kernel.secret%')]
         private readonly string $secret,
-    ) {
-    }
+    ) {}
 
     public function issue(string $action, string $target, \DateTimeImmutable $now): string
     {
         $expires = $now->getTimestamp() + self::LIFETIME;
 
-        return $expires.'.'.$this->sign($action, $target, $expires);
+        return $expires . '.' . $this->sign($action, $target, $expires);
     }
 
-    public function isValid(string $token, string $action, string $target, \DateTimeImmutable $now): bool
-    {
+    public function isValid(
+        #[\SensitiveParameter]
+        string $token,
+        string $action,
+        string $target,
+        \DateTimeImmutable $now,
+    ): bool {
         if (1 !== preg_match('/^(\d{1,12})\.([0-9a-f]{64})$/', $token, $matches)) {
             return false;
         }
 
         $expires = (int) $matches[1];
 
-        return $expires >= $now->getTimestamp()
-            && hash_equals($this->sign($action, $target, $expires), $matches[2]);
+        return $expires >= $now->getTimestamp() && hash_equals($this->sign($action, $target, $expires), $matches[2]);
     }
 
     private function sign(string $action, string $target, int $expires): string
     {
         // Eigener Zweck im Schluessel, damit sich das Token nicht mit anderen
         // HMACs ueber APP_SECRET (z. B. Mercure-Topics) verwechseln laesst.
-        return hash_hmac('sha256', $action."\0".strtolower($target)."\0".$expires, 'admin-confirmation'."\0".$this->secret);
+        return hash_hmac(
+            'sha256',
+            $action . "\0" . strtolower($target) . "\0" . $expires,
+            'admin-confirmation' . "\0" . $this->secret,
+        );
     }
 }

@@ -29,8 +29,7 @@ final class EncryptionService
         private readonly SyncLock $lock,
         private readonly ShareService $shares,
         private readonly LiveUpdates $live,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{state: string, keyCheck: string|null}
@@ -38,10 +37,9 @@ final class EncryptionService
     public function status(User $user): array
     {
         /** @var array{encryption_state: string, key_check: string|null}|false $row */
-        $row = $this->em->getConnection()->fetchAssociative(
-            'SELECT encryption_state, key_check FROM app_user WHERE id = :id',
-            ['id' => $user->getId()->toRfc4122()],
-        );
+        $row = $this->em->getConnection()->fetchAssociative('SELECT encryption_state, key_check FROM app_user WHERE id = :id', [
+            'id' => $user->getId()->toRfc4122(),
+        ]);
         if (false === $row) {
             throw ApiProblemException::notFound('Konto nicht gefunden.');
         }
@@ -64,7 +62,9 @@ final class EncryptionService
             [$state, $migrationClientId] = $this->lockAccount($connection, $user);
 
             if (EncryptionState::Encrypted === $state) {
-                throw ApiProblemException::alreadyEncrypted('Das Konto ist bereits verschluesselt. Dieses Geraet braucht den Konto-Code.');
+                throw ApiProblemException::alreadyEncrypted(
+                    'Das Konto ist bereits verschluesselt. Dieses Geraet braucht den Konto-Code.',
+                );
             }
             if (EncryptionState::Migrating === $state && $migrationClientId !== $clientId->toRfc4122()) {
                 throw ApiProblemException::migrationInProgress('Ein anderes Geraet stellt dieses Konto gerade um.');
@@ -107,9 +107,14 @@ final class EncryptionService
 
             $remaining = $this->countPlaintextRows($connection, $user);
             if ($remaining > 0) {
-                throw ApiProblemException::encryptionIncomplete(EncryptionState::Plaintext === $state
-                    ? \sprintf('Das Konto hat %d Klartext-Zeilen; zuerst "begin" aufrufen und sie verschluesselt hochladen.', $remaining)
-                    : \sprintf('Noch %d Klartext-Zeilen auf dem Server.', $remaining));
+                throw ApiProblemException::encryptionIncomplete(
+                    EncryptionState::Plaintext === $state
+                        ? \sprintf(
+                            'Das Konto hat %d Klartext-Zeilen; zuerst "begin" aufrufen und sie verschluesselt hochladen.',
+                            $remaining,
+                        )
+                        : \sprintf('Noch %d Klartext-Zeilen auf dem Server.', $remaining),
+                );
             }
 
             // Direkter Weg ohne `begin`: auch hier keine Mitgliedschaft in
@@ -130,10 +135,9 @@ final class EncryptionService
     private function lockAccount(Connection $connection, User $user): array
     {
         /** @var array{encryption_state: string, migration_client_id: string|null}|false $row */
-        $row = $connection->fetchAssociative(
-            'SELECT encryption_state, migration_client_id FROM app_user WHERE id = :id FOR UPDATE',
-            ['id' => $user->getId()->toRfc4122()],
-        );
+        $row = $connection->fetchAssociative('SELECT encryption_state, migration_client_id FROM app_user WHERE id = :id FOR UPDATE', [
+            'id' => $user->getId()->toRfc4122(),
+        ]);
         if (false === $row) {
             throw ApiProblemException::notFound('Konto nicht gefunden.');
         }
@@ -195,6 +199,8 @@ final class EncryptionService
     {
         $connection = $this->em->getConnection();
 
-        return $this->live->around(static fn (): mixed => $connection->transactional(static fn (): mixed => $work($connection)));
+        return $this->live->around(static fn(): mixed => $connection->transactional(
+            static fn(): mixed => $work($connection),
+        ));
     }
 }

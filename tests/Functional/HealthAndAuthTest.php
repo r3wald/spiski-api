@@ -17,10 +17,7 @@ final class HealthAndAuthTest extends ApiTestCase
         $body = json_decode((string) $response->getContent(), true, 512, \JSON_THROW_ON_ERROR);
         self::assertSame('ok', $body['status']);
         self::assertSame('up', $body['database']);
-        self::assertSame(
-            static::getContainer()->getParameter('spiski.api_version'),
-            $body['version'],
-        );
+        self::assertSame(static::getContainer()->getParameter('spiski.api_version'), $body['version']);
     }
 
     public function testSyncWithoutTokenIsUnauthorized(): void
@@ -56,7 +53,7 @@ final class HealthAndAuthTest extends ApiTestCase
         $this->client->request(
             'POST',
             '/v1/sync',
-            server: ['HTTP_AUTHORIZATION' => 'Bearer '.self::uuid()],
+            server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::uuid()],
             content: '{nope',
         );
 
@@ -104,7 +101,7 @@ final class HealthAndAuthTest extends ApiTestCase
         self::assertSame(1, $this->countRows('shopping_list'));
         self::assertSame(1, $this->countRows('shopping_item'));
 
-        $this->client->request('DELETE', '/v1/me', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$account]);
+        $this->client->request('DELETE', '/v1/me', server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $account]);
         self::assertSame(204, $this->client->getResponse()->getStatusCode());
 
         self::assertSame(0, $this->countUsers());

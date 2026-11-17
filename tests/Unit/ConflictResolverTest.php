@@ -20,26 +20,27 @@ final class ConflictResolverTest extends TestCase
 
     public function testUnknownRowIsInserted(): void
     {
-        self::assertSame(
-            MergeDecision::Insert,
-            $this->resolver->decide(null, null, $this->at('10:00:00'), Uuid::v4()),
-        );
+        self::assertSame(MergeDecision::Insert, $this->resolver->decide(null, null, $this->at('10:00:00'), Uuid::v4()));
     }
 
     public function testNewerIncomingWins(): void
     {
-        self::assertSame(
-            MergeDecision::Accept,
-            $this->resolver->decide($this->at('10:00:00'), Uuid::v4(), $this->at('10:00:01'), Uuid::v4()),
-        );
+        self::assertSame(MergeDecision::Accept, $this->resolver->decide(
+            $this->at('10:00:00'),
+            Uuid::v4(),
+            $this->at('10:00:01'),
+            Uuid::v4(),
+        ));
     }
 
     public function testOlderIncomingLoses(): void
     {
-        self::assertSame(
-            MergeDecision::Reject,
-            $this->resolver->decide($this->at('10:00:01'), Uuid::v4(), $this->at('10:00:00'), Uuid::v4()),
-        );
+        self::assertSame(MergeDecision::Reject, $this->resolver->decide(
+            $this->at('10:00:01'),
+            Uuid::v4(),
+            $this->at('10:00:00'),
+            Uuid::v4(),
+        ));
     }
 
     public function testMillisecondDifferenceIsNotATie(): void
@@ -47,10 +48,7 @@ final class ConflictResolverTest extends TestCase
         $server = new \DateTimeImmutable('2026-01-01T10:00:00.100Z');
         $incoming = new \DateTimeImmutable('2026-01-01T10:00:00.101Z');
 
-        self::assertSame(
-            MergeDecision::Accept,
-            $this->resolver->decide($server, Uuid::v4(), $incoming, Uuid::v4()),
-        );
+        self::assertSame(MergeDecision::Accept, $this->resolver->decide($server, Uuid::v4(), $incoming, Uuid::v4()));
     }
 
     public function testTimezonesAreComparedAsInstants(): void
@@ -69,15 +67,19 @@ final class ConflictResolverTest extends TestCase
     {
         $moment = $this->at('10:00:00');
 
-        self::assertSame(
-            MergeDecision::Accept,
-            $this->resolver->decide($moment, $this->uuid('1'), $moment, $this->uuid('f')),
-        );
+        self::assertSame(MergeDecision::Accept, $this->resolver->decide(
+            $moment,
+            $this->uuid('1'),
+            $moment,
+            $this->uuid('f'),
+        ));
 
-        self::assertSame(
-            MergeDecision::Reject,
-            $this->resolver->decide($moment, $this->uuid('f'), $moment, $this->uuid('1')),
-        );
+        self::assertSame(MergeDecision::Reject, $this->resolver->decide(
+            $moment,
+            $this->uuid('f'),
+            $moment,
+            $this->uuid('1'),
+        ));
     }
 
     public function testTieWithSameClientIdIsNoOp(): void
@@ -85,10 +87,7 @@ final class ConflictResolverTest extends TestCase
         $moment = $this->at('10:00:00');
         $client = $this->uuid('7');
 
-        self::assertSame(
-            MergeDecision::NoOp,
-            $this->resolver->decide($moment, $client, $moment, $client),
-        );
+        self::assertSame(MergeDecision::NoOp, $this->resolver->decide($moment, $client, $moment, $client));
     }
 
     /**
@@ -115,11 +114,11 @@ final class ConflictResolverTest extends TestCase
 
     private function at(string $time): \DateTimeImmutable
     {
-        return new \DateTimeImmutable('2026-01-01T'.$time.'.000Z');
+        return new \DateTimeImmutable('2026-01-01T' . $time . '.000Z');
     }
 
     private function uuid(string $firstHexDigit): Uuid
     {
-        return Uuid::fromString($firstHexDigit.'0000000-0000-4000-8000-000000000000');
+        return Uuid::fromString($firstHexDigit . '0000000-0000-4000-8000-000000000000');
     }
 }

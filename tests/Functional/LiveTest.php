@@ -30,7 +30,7 @@ final class LiveTest extends ApiTestCase
 
     public function testSubscriptionContainsOnlyTheHashedTopic(): void
     {
-        $this->client->request('GET', '/v1/live', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$this->owner]);
+        $this->client->request('GET', '/v1/live', server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->owner]);
         self::assertResponseIsSuccessful();
         self::assertResponseHeaderSame('Cache-Control', 'no-store, private');
 
@@ -46,11 +46,14 @@ final class LiveTest extends ApiTestCase
         $claims = self::claims($live['token']);
         self::assertSame('https://spiski.r3wald.net', $claims['iss']);
         self::assertSame('https://spiski.r3wald.net/.well-known/mercure', $claims['aud']);
-        self::assertSame([[
-            'type' => 'https://mercure.rocks/authorization-detail',
-            'actions' => ['subscribe'],
-            'topics' => [['match' => $live['topic']]],
-        ]], $claims['authorization_details']);
+        self::assertSame(
+            [[
+                'type' => 'https://mercure.rocks/authorization-detail',
+                'actions' => ['subscribe'],
+                'topics' => [['match' => $live['topic']]],
+            ]],
+            $claims['authorization_details'],
+        );
         self::assertGreaterThan(time(), $claims['exp']);
 
         // Browser: dasselbe Token als Cookie, nur fuer den Hub.
@@ -161,7 +164,9 @@ final class LiveTest extends ApiTestCase
 
     private function share(string $account): string
     {
-        $this->client->request('POST', '/v1/lists/'.$this->listId.'/share', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$account]);
+        $this->client->request('POST', '/v1/lists/' . $this->listId . '/share', server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $account,
+        ]);
         self::assertResponseIsSuccessful();
 
         /** @var array{code: string} $body */
@@ -172,7 +177,7 @@ final class LiveTest extends ApiTestCase
 
     private function join(string $account, string $code): void
     {
-        $this->client->request('POST', '/v1/shares/'.$code, server: ['HTTP_AUTHORIZATION' => 'Bearer '.$account]);
+        $this->client->request('POST', '/v1/shares/' . $code, server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $account]);
         self::assertResponseIsSuccessful();
     }
 

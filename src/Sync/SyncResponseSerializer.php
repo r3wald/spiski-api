@@ -24,8 +24,14 @@ final class SyncResponseSerializer
             'hasMore' => $result->hasMore,
             'fullResync' => $result->fullResync,
             'changes' => [
-                'lists' => array_map(fn (ShoppingList $list): array => $this->serializeList($list, $result), $result->lists),
-                'items' => array_map(fn (ShoppingItem $item): array => $this->serializeItem($item, $result), $result->items),
+                'lists' => array_map(fn(ShoppingList $list): array => $this->serializeList(
+                    $list,
+                    $result,
+                ), $result->lists),
+                'items' => array_map(fn(ShoppingItem $item): array => $this->serializeItem(
+                    $item,
+                    $result,
+                ), $result->items),
             ],
             // Listen, auf die das Konto keinen Zugriff mehr hat (Freigabe
             // beendet, verlassen, Besitzer geloescht). Der Client entfernt sie
@@ -48,13 +54,13 @@ final class SyncResponseSerializer
 
         return [
             'id' => $id,
-            ...$this->listContent($list, $isOwner ? $list->getWrappedKey() : ($result->memberWrappedKeys[$id] ?? null)),
+            ...$this->listContent($list, $isOwner ? $list->getWrappedKey() : $result->memberWrappedKeys[$id] ?? null),
             'color' => $list->getColor(),
             'sortOrder' => $list->getSortOrder(),
             'createdAt' => $this->timestamp($list->getCreatedAt()),
             'updatedAt' => $this->timestamp($list->getUpdatedAt()),
             'deletedAt' => $this->timestamp($list->getDeletedAt()),
-            'serverVersion' => $result->versions['list:'.$id] ?? $list->getServerVersion(),
+            'serverVersion' => $result->versions['list:' . $id] ?? $list->getServerVersion(),
             // Nur in Antworten: wem die Liste gehoert und mit wie vielen
             // Konten sie geteilt ist (CLAUDE.md 12).
             'role' => $isOwner ? 'owner' : 'member',
@@ -79,7 +85,7 @@ final class SyncResponseSerializer
             'updatedAt' => $this->timestamp($item->getUpdatedAt()),
             'deletedAt' => $this->timestamp($item->getDeletedAt()),
             'movedAt' => $this->timestamp($item->getMovedAt()),
-            'serverVersion' => $result->versions['item:'.$item->getId()->toRfc4122()] ?? $item->getServerVersion(),
+            'serverVersion' => $result->versions['item:' . $item->getId()->toRfc4122()] ?? $item->getServerVersion(),
             // Nur in Antworten: Hat zuletzt ein anderes Konto den Artikel
             // geaendert (Mitglied oder Besitzer einer geteilten Liste)? Eigene
             // Geraete zaehlen nicht. Die App benachrichtigt daraufhin.

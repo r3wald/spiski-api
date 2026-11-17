@@ -34,6 +34,5 @@ final class SyncRequest
         public readonly array $invalidItems,
         public readonly array $pushedListIds,
         public readonly array $pushedItemIds,
-    ) {
-    }
+    ) {}
 }

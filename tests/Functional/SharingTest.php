@@ -43,7 +43,7 @@ final class SharingTest extends ApiTestCase
 
         self::assertSame($first['code'], $second['code']);
         self::assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{24}$/', $first['code']);
-        self::assertStringEndsWith('/join/'.$first['code'], $first['url']);
+        self::assertStringEndsWith('/join/' . $first['code'], $first['url']);
     }
 
     public function testMemberReceivesListAndItemsAfterJoining(): void
@@ -58,8 +58,9 @@ final class SharingTest extends ApiTestCase
         self::assertSame(1, $list['memberCount']);
         self::assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/', $list['joinedAt']);
         self::assertSame(
-            (new \DateTimeImmutable((string) $this->connection()->fetchOne('SELECT joined_at FROM list_member')))
-                ->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z'),
+            new \DateTimeImmutable((string) $this->connection()->fetchOne('SELECT joined_at FROM list_member'))
+                ->setTimezone(new \DateTimeZone('UTC'))
+                ->format('Y-m-d\TH:i:s.v\Z'),
             $list['joinedAt'],
         );
         self::assertSame('Milch', self::findRow($response, 'items', $this->itemId)['name'] ?? null);
@@ -93,13 +94,20 @@ final class SharingTest extends ApiTestCase
         // Und zurueck: der Besitzer hakt ab, das Mitglied sieht es.
         $checked = self::itemRow($bread, $this->listId, '2026-06-02T11:00:00.000Z', 'Brot');
         $checked['isChecked'] = true;
-        $this->sync($this->owner, ['since' => $ownerView['serverCursor'], 'clientId' => self::uuid(), 'changes' => ['items' => [$checked]]]);
+        $this->sync($this->owner, [
+            'since' => $ownerView['serverCursor'],
+            'clientId' => self::uuid(),
+            'changes' => ['items' => [$checked]],
+        ]);
 
         $memberView = $this->sync($this->member, ['since' => $pushed['serverCursor'], 'clientId' => self::uuid()]);
         self::assertTrue(self::findRow($memberView, 'items', $bread)['isChecked'] ?? false);
 
         // Der Artikel zaehlt zum Kontingent des Besitzers.
-        self::assertSame($this->owner, $this->connection()->fetchOne('SELECT user_id FROM shopping_item WHERE id = ?', [$bread]));
+        self::assertSame(
+            $this->owner,
+            $this->connection()->fetchOne('SELECT user_id FROM shopping_item WHERE id = ?', [$bread]),
+        );
     }
 
     public function testChangedByOtherMarksChangesOfOtherAccountsOnly(): void
@@ -113,7 +121,12 @@ final class SharingTest extends ApiTestCase
         $this->sync($this->member, [
             'since' => $memberCursor,
             'clientId' => self::uuid(),
-            'changes' => ['items' => [self::itemRow($this->itemId, $this->listId, '2026-06-02T10:00:00.000Z', 'Milch Ersatz')]],
+            'changes' => ['items' => [self::itemRow(
+                $this->itemId,
+                $this->listId,
+                '2026-06-02T10:00:00.000Z',
+                'Milch Ersatz',
+            )]],
         ]);
 
         $ownerView = $this->sync($this->owner, ['since' => $ownerCursor, 'clientId' => self::uuid()]);
@@ -140,7 +153,7 @@ final class SharingTest extends ApiTestCase
         // Das Echo liefert den Serverstand, damit der Client seine Aenderung verwirft.
         self::assertSame('Wocheneinkauf', self::findRow($response, 'lists', $this->listId)['name'] ?? null);
 
-        $this->shareRequest('POST', '/v1/lists/'.$this->listId.'/share', $this->member);
+        $this->shareRequest('POST', '/v1/lists/' . $this->listId . '/share', $this->member);
         self::assertResponseStatusCodeSame(403);
     }
 
@@ -157,7 +170,7 @@ final class SharingTest extends ApiTestCase
         self::assertSame('unknown_list', $response['pushResults']['items'][0]['reason']);
         self::assertSame([], $response['changes']['lists']);
 
-        $this->shareRequest('POST', '/v1/lists/'.$this->listId.'/share', $stranger);
+        $this->shareRequest('POST', '/v1/lists/' . $this->listId . '/share', $stranger);
         self::assertResponseStatusCodeSame(404);
     }
 
@@ -186,7 +199,7 @@ final class SharingTest extends ApiTestCase
         $this->joinWithCode($this->member, $this->share($this->owner, $this->listId)['code']);
         $cursor = $this->cursor($this->member);
 
-        $this->shareRequest('DELETE', '/v1/lists/'.$this->listId.'/membership', $this->member);
+        $this->shareRequest('DELETE', '/v1/lists/' . $this->listId . '/membership', $this->member);
         self::assertResponseStatusCodeSame(204);
 
         $response = $this->sync($this->member, [
@@ -204,7 +217,7 @@ final class SharingTest extends ApiTestCase
         $ownerView = $this->sync($this->owner, ['since' => 0, 'clientId' => self::uuid()]);
         self::assertSame(0, self::findRow($ownerView, 'lists', $this->listId)['memberCount'] ?? null);
 
-        $this->shareRequest('DELETE', '/v1/lists/'.$this->listId.'/membership', $this->owner);
+        $this->shareRequest('DELETE', '/v1/lists/' . $this->listId . '/membership', $this->owner);
         self::assertResponseStatusCodeSame(409);
     }
 
@@ -212,7 +225,7 @@ final class SharingTest extends ApiTestCase
     {
         $code = $this->share($this->owner, $this->listId)['code'];
         $this->joinWithCode($this->member, $code);
-        $this->shareRequest('DELETE', '/v1/lists/'.$this->listId.'/membership', $this->member);
+        $this->shareRequest('DELETE', '/v1/lists/' . $this->listId . '/membership', $this->member);
         $cursor = $this->cursor($this->member);
 
         $this->joinWithCode($this->member, $code);
@@ -231,13 +244,19 @@ final class SharingTest extends ApiTestCase
         $this->joinWithCode($second, $code);
         $cursor = $this->cursor($second);
 
-        $this->shareRequest('DELETE', '/v1/lists/'.$this->listId.'/share', $this->owner);
+        $this->shareRequest('DELETE', '/v1/lists/' . $this->listId . '/share', $this->owner);
         self::assertResponseStatusCodeSame(204);
 
-        self::assertSame([$this->listId], $this->sync($second, ['since' => $cursor, 'clientId' => self::uuid()])['revokedLists']);
-        $this->shareRequest('POST', '/v1/shares/'.$code, self::uuid());
+        self::assertSame(
+            [$this->listId],
+            $this->sync($second, ['since' => $cursor, 'clientId' => self::uuid()])['revokedLists'],
+        );
+        $this->shareRequest('POST', '/v1/shares/' . $code, self::uuid());
         self::assertResponseStatusCodeSame(404);
-        self::assertNotNull(self::findRow($this->sync($this->owner, ['since' => 0, 'clientId' => self::uuid()]), 'lists', $this->listId));
+        self::assertNotNull(self::findRow($this->sync($this->owner, [
+            'since' => 0,
+            'clientId' => self::uuid(),
+        ]), 'lists', $this->listId));
     }
 
     public function testRenewInvalidatesOldCodeButKeepsMembers(): void
@@ -245,12 +264,12 @@ final class SharingTest extends ApiTestCase
         $old = $this->share($this->owner, $this->listId)['code'];
         $this->joinWithCode($this->member, $old);
 
-        $this->shareRequest('POST', '/v1/lists/'.$this->listId.'/share/renew', $this->owner);
+        $this->shareRequest('POST', '/v1/lists/' . $this->listId . '/share/renew', $this->owner);
         self::assertResponseIsSuccessful();
         $new = $this->json()['code'];
         self::assertNotSame($old, $new);
 
-        $this->shareRequest('POST', '/v1/shares/'.$old, self::uuid());
+        $this->shareRequest('POST', '/v1/shares/' . $old, self::uuid());
         self::assertResponseStatusCodeSame(404);
         self::assertSame($this->listId, $this->joinWithCode(self::uuid(), $new));
         self::assertSame(2, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM list_member'));
@@ -307,17 +326,25 @@ final class SharingTest extends ApiTestCase
             $this->sync($this->member, [
                 'since' => 0,
                 'clientId' => self::uuid(),
-                'changes' => ['items' => [self::itemRow(self::uuid(), $this->listId, \sprintf('2026-06-06T10:00:0%d.000Z', $i))]],
+                'changes' => ['items' => [self::itemRow(
+                    self::uuid(),
+                    $this->listId,
+                    \sprintf('2026-06-06T10:00:0%d.000Z', $i),
+                )]],
             ]);
         }
 
         foreach ([$this->owner, $this->member] as $account) {
             /** @var list<int> $versions */
-            $versions = array_map(intval(...), $this->connection()->fetchFirstColumn(
-                'SELECT version FROM sync_view WHERE user_id = ? ORDER BY version',
-                [$account],
-            ));
-            $counter = (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = ?', [$account]);
+            $versions = array_map(
+                intval(...),
+                $this->connection()->fetchFirstColumn('SELECT version FROM sync_view WHERE user_id = ? ORDER BY version', [
+                    $account,
+                ]),
+            );
+            $counter = (int) $this->connection()->fetchOne('SELECT version_counter FROM app_user WHERE id = ?', [
+                $account,
+            ]);
 
             self::assertSameSize($versions, array_unique($versions));
             self::assertSame($counter, max($versions), 'Der Zaehler steht auf der hoechsten vergebenen Version.');
@@ -358,7 +385,7 @@ final class SharingTest extends ApiTestCase
      */
     private function share(string $account, string $listId): array
     {
-        $this->shareRequest('POST', '/v1/lists/'.$listId.'/share', $account);
+        $this->shareRequest('POST', '/v1/lists/' . $listId . '/share', $account);
         self::assertResponseIsSuccessful();
 
         /** @var array{code: string, url: string} */
@@ -367,7 +394,7 @@ final class SharingTest extends ApiTestCase
 
     private function joinWithCode(string $account, string $code): string
     {
-        $this->shareRequest('POST', '/v1/shares/'.rawurlencode($code), $account);
+        $this->shareRequest('POST', '/v1/shares/' . rawurlencode($code), $account);
         self::assertResponseIsSuccessful((string) $this->client->getResponse()->getContent());
 
         return $this->json()['listId'];
@@ -380,7 +407,7 @@ final class SharingTest extends ApiTestCase
 
     private function shareRequest(string $method, string $path, string $account): void
     {
-        $this->client->request($method, $path, server: ['HTTP_AUTHORIZATION' => 'Bearer '.$account]);
+        $this->client->request($method, $path, server: ['HTTP_AUTHORIZATION' => 'Bearer ' . $account]);
     }
 
     /**

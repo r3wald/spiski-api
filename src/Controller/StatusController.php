@@ -32,8 +32,7 @@ final class StatusController
         private readonly StatusPageRenderer $renderer,
         private readonly RateLimiterFactoryInterface $statusLimiter,
         private readonly ClockInterface $clock,
-    ) {
-    }
+    ) {}
 
     #[Route('/status.json', name: 'status_json', methods: ['GET'])]
     public function json(Request $request): JsonResponse

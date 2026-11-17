@@ -25,8 +25,7 @@ final class UserProvider implements UserProviderInterface
 {
     public function __construct(
         private readonly UserRepository $users,
-    ) {
-    }
+    ) {}
 
     public function loadUserByIdentifier(string $identifier): UserInterface
     {

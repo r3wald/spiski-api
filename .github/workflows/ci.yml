@@ -54,6 +54,16 @@ jobs:
       - name: Abhaengigkeiten installieren
         run: composer install --no-interaction --no-progress --prefer-dist
 
+      # Wie `make mago`. Der Composer-Wrapper laedt die Mago-Binaerdatei beim ersten Aufruf
+      # von GitHub; mit Token, damit das anonyme Rate-Limit geteilter Runner nicht greift.
+      - name: Mago (Format, Lint, Analyse)
+        run: |
+          vendor/bin/mago format --check
+          vendor/bin/mago lint --minimum-fail-level=warning
+          vendor/bin/mago analyze --minimum-fail-level=warning
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Statische Analyse
         run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress
 

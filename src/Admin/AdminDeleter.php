@@ -47,8 +47,7 @@ final class AdminDeleter
         private readonly ListAccess $access,
         private readonly SyncLock $lock,
         private readonly LiveUpdates $live,
-    ) {
-    }
+    ) {}
 
     /**
      * @return bool true = geloescht, false = war schon archiviert (nichts geaendert)
@@ -57,7 +56,9 @@ final class AdminDeleter
     {
         return $this->transactional(function () use ($itemId, $now): bool {
             /** @var string|false $listId */
-            $listId = $this->connection->fetchOne('SELECT list_id FROM shopping_item WHERE id = :id', ['id' => $itemId]);
+            $listId = $this->connection->fetchOne('SELECT list_id FROM shopping_item WHERE id = :id', [
+                'id' => $itemId,
+            ]);
             if (false === $listId) {
                 throw ApiProblemException::notFound('Eintrag nicht gefunden.');
             }
@@ -72,7 +73,9 @@ final class AdminDeleter
     public function deleteList(string $listId, \DateTimeImmutable $now): bool
     {
         return $this->transactional(function () use ($listId, $now): bool {
-            if (false === $this->connection->fetchOne('SELECT 1 FROM shopping_list WHERE id = :id', ['id' => $listId])) {
+            if (
+                false === $this->connection->fetchOne('SELECT 1 FROM shopping_list WHERE id = :id', ['id' => $listId])
+            ) {
                 throw ApiProblemException::notFound('Liste nicht gefunden.');
             }
 
@@ -86,7 +89,7 @@ final class AdminDeleter
     private function transactional(callable $work): bool
     {
         /** @var mixed $result */
-        $result = $this->live->around(fn (): mixed => $this->connection->transactional(function () use ($work): bool {
+        $result = $this->live->around(fn(): mixed => $this->connection->transactional(function () use ($work): bool {
             // Selten und womoeglich an einer geteilten Liste: exklusiv, wie Beitritt
             // und Austritt. Danach sind die Mitgliedschaften stabil.
             $this->lock->exclusive($this->connection);
@@ -100,10 +103,16 @@ final class AdminDeleter
     /**
      * @param 'shopping_item'|'shopping_list' $table
      */
-    private function tombstone(string $table, string $kind, string $rowId, string $listId, \DateTimeImmutable $now): bool
-    {
-        $audience = $this->access->forLists([$listId])[$listId]
-            ?? throw new \LogicException('Liste einer vorhandenen Zeile fehlt.');
+    private function tombstone(
+        string $table,
+        string $kind,
+        string $rowId,
+        string $listId,
+        \DateTimeImmutable $now,
+    ): bool {
+        $audience = $this->access->forLists([$listId])[$listId] ?? throw new \LogicException(
+            'Liste einer vorhandenen Zeile fehlt.',
+        );
 
         // Sperrt die Kontozeilen; ein Sync dieser Konten wartet jetzt. Erst danach
         // ist der Stand der Zeile verbindlich.
@@ -151,8 +160,18 @@ final class AdminDeleter
     private function after(\DateTimeImmutable $now, string $previousUpdatedAt): \DateTimeImmutable
     {
         $utc = new \DateTimeZone('UTC');
-        $toMs = static fn (\DateTimeImmutable $t): \DateTimeImmutable => \DateTimeImmutable::createFromFormat(SyncLimits::TIMESTAMP_FORMAT, $t->setTimezone($utc)->format(SyncLimits::TIMESTAMP_FORMAT), $utc)
-            ?: throw new \LogicException('Zeitstempel nicht darstellbar.');
+        $toMs = static function (\DateTimeImmutable $t) use ($utc): \DateTimeImmutable {
+            $rounded = \DateTimeImmutable::createFromFormat(
+                SyncLimits::TIMESTAMP_FORMAT,
+                $t->setTimezone($utc)->format(SyncLimits::TIMESTAMP_FORMAT),
+                $utc,
+            );
+            if (false === $rounded) {
+                throw new \LogicException('Zeitstempel nicht darstellbar.');
+            }
+
+            return $rounded;
+        };
 
         // Erst runden, dann vergleichen: sonst koennte das Runden einen Gleichstand erzeugen.
         $at = $toMs($now);

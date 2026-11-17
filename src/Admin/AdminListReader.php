@@ -29,8 +29,7 @@ final class AdminListReader
 
     public function __construct(
         private readonly Connection $connection,
-    ) {
-    }
+    ) {}
 
     /**
      * @param string $query                Teilstring des Listennamens (ohne Beachtung der Gross-/Kleinschreibung,
@@ -68,11 +67,11 @@ final class AdminListReader
                 ((l.enc IS NULL AND l.name ILIKE :like ESCAPE '\')
                  OR left(encode(sha256(convert_to(l.user_id::text, 'UTF8')), 'hex'), 12) LIKE :owner ESCAPE '\')
                 SQL;
-            $params['like'] = '%'.$this->escapeLike($query).'%';
-            $params['owner'] = $this->escapeLike(strtolower($query)).'%';
+            $params['like'] = '%' . $this->escapeLike($query) . '%';
+            $params['owner'] = $this->escapeLike(strtolower($query)) . '%';
         }
 
-        $where = [] === $conditions ? '' : 'WHERE '.implode(' AND ', $conditions);
+        $where = [] === $conditions ? '' : 'WHERE ' . implode(' AND ', $conditions);
 
         /** @var array{total: int|string, owners: int|string}|false $totals */
         $totals = $this->connection->fetchAssociative(
@@ -82,49 +81,44 @@ final class AdminListReader
 
         // GROUP BY auf den Primaerschluessel reicht in PostgreSQL: alle anderen
         // Spalten der Liste sind davon funktional abhaengig.
-        $rows = $this->connection->fetchAllAssociative(
-            \sprintf(
-                <<<'SQL'
-                    SELECT l.id, l.user_id, l.name, l.color, l.sort_order,
-                           l.created_at, l.updated_at, l.deleted_at,
-                           COUNT(i.id) AS item_count,
-                           COUNT(i.id) FILTER (WHERE i.deleted_at IS NULL) AS active_item_count,
-                           -- Unterabfrage statt zweitem JOIN: ein JOIN auf list_member wuerde jede
-                           -- Artikelzeile je Mitglied vervielfachen und die Zaehler verfaelschen.
-                           (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count,
-                           -- Nur ob ein Code aktiv ist, nie der Code selbst: wer ihn kennt, kann beitreten.
-                           (l.share_code IS NOT NULL) AS share_code_active,
-                           (l.enc IS NOT NULL) AS encrypted,
-                           (SELECT u.encryption_state FROM app_user u WHERE u.id = l.user_id) AS encryption_state
-                    FROM shopping_list l
-                    LEFT JOIN shopping_item i ON i.list_id = l.id
-                    %s
-                    GROUP BY l.id
-                    ORDER BY l.updated_at DESC, l.id
-                    LIMIT :limit OFFSET :offset
-                    SQL,
-                $where,
-            ),
-            $params + ['limit' => $limit, 'offset' => $offset],
-        );
+        $rows = $this->connection->fetchAllAssociative(\sprintf(<<<'SQL'
+            SELECT l.id, l.user_id, l.name, l.color, l.sort_order,
+                   l.created_at, l.updated_at, l.deleted_at,
+                   COUNT(i.id) AS item_count,
+                   COUNT(i.id) FILTER (WHERE i.deleted_at IS NULL) AS active_item_count,
+                   -- Unterabfrage statt zweitem JOIN: ein JOIN auf list_member wuerde jede
+                   -- Artikelzeile je Mitglied vervielfachen und die Zaehler verfaelschen.
+                   (SELECT COUNT(*) FROM list_member m WHERE m.list_id = l.id) AS member_count,
+                   -- Nur ob ein Code aktiv ist, nie der Code selbst: wer ihn kennt, kann beitreten.
+                   (l.share_code IS NOT NULL) AS share_code_active,
+                   (l.enc IS NOT NULL) AS encrypted,
+                   (SELECT u.encryption_state FROM app_user u WHERE u.id = l.user_id) AS encryption_state
+            FROM shopping_list l
+            LEFT JOIN shopping_item i ON i.list_id = l.id
+            %s
+            GROUP BY l.id
+            ORDER BY l.updated_at DESC, l.id
+            LIMIT :limit OFFSET :offset
+            SQL, $where), $params + ['limit' => $limit, 'offset' => $offset]);
 
         $lists = [];
         foreach ($rows as $row) {
             $encrypted = $this->toBool($row['encrypted']);
-            $lists[] = [
-                'id' => (string) $row['id'],
-                'owner' => $this->ownerRef((string) $row['user_id']),
-                'encryptionState' => (string) $row['encryption_state'],
-                'encrypted' => $encrypted,
-                'name' => $encrypted ? null : (string) $row['name'],
-                'color' => (int) $row['color'],
-                'sortOrder' => (int) $row['sort_order'],
-                'createdAt' => $this->timestamp((string) $row['created_at']),
-                'updatedAt' => $this->timestamp((string) $row['updated_at']),
-                'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
-                'itemCount' => (int) $row['item_count'],
-                'activeItemCount' => (int) $row['active_item_count'],
-            ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']));
+            $lists[] =
+                [
+                    'id' => (string) $row['id'],
+                    'owner' => $this->ownerRef((string) $row['user_id']),
+                    'encryptionState' => (string) $row['encryption_state'],
+                    'encrypted' => $encrypted,
+                    'name' => $encrypted ? null : (string) $row['name'],
+                    'color' => (int) $row['color'],
+                    'sortOrder' => (int) $row['sort_order'],
+                    'createdAt' => $this->timestamp((string) $row['created_at']),
+                    'updatedAt' => $this->timestamp((string) $row['updated_at']),
+                    'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
+                    'itemCount' => (int) $row['item_count'],
+                    'activeItemCount' => (int) $row['active_item_count'],
+                ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']));
         }
 
         if ($includeItems && [] !== $lists) {
@@ -215,17 +209,19 @@ final class AdminListReader
 
         $encrypted = $this->toBool($row['encrypted']);
 
-        return [
-            'id' => (string) $row['id'],
-            'owner' => $this->ownerRef((string) $row['user_id']),
-            'encrypted' => $encrypted,
-            'name' => $encrypted ? null : (string) $row['name'],
-            'color' => (int) $row['color'],
-            'updatedAt' => $this->timestamp((string) $row['updated_at']),
-            'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
-            'itemCount' => (int) $row['item_count'],
-            'activeItemCount' => (int) $row['active_item_count'],
-        ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']));
+        return (
+            [
+                'id' => (string) $row['id'],
+                'owner' => $this->ownerRef((string) $row['user_id']),
+                'encrypted' => $encrypted,
+                'name' => $encrypted ? null : (string) $row['name'],
+                'color' => (int) $row['color'],
+                'updatedAt' => $this->timestamp((string) $row['updated_at']),
+                'deletedAt' => null === $row['deleted_at'] ? null : $this->timestamp((string) $row['deleted_at']),
+                'itemCount' => (int) $row['item_count'],
+                'activeItemCount' => (int) $row['active_item_count'],
+            ] + $this->sharing((int) $row['member_count'], $this->toBool($row['share_code_active']))
+        );
     }
 
     /**
@@ -245,16 +241,13 @@ final class AdminListReader
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            \sprintf(
-                <<<'SQL'
-                    SELECT id, list_id, name, quantity, unit, is_checked, note, sort_order,
-                           created_at, updated_at, deleted_at, moved_at, (enc IS NOT NULL) AS encrypted
-                    FROM shopping_item
-                    WHERE list_id IN (:ids)%s
-                    ORDER BY list_id, sort_order, created_at, id
-                    SQL,
-                $conditions,
-            ),
+            \sprintf(<<<'SQL'
+                SELECT id, list_id, name, quantity, unit, is_checked, note, sort_order,
+                       created_at, updated_at, deleted_at, moved_at, (enc IS NOT NULL) AS encrypted
+                FROM shopping_item
+                WHERE list_id IN (:ids)%s
+                ORDER BY list_id, sort_order, created_at, id
+                SQL, $conditions),
             $params,
             ['ids' => ArrayParameterType::STRING],
         );
@@ -324,7 +317,7 @@ final class AdminListReader
 
     private function timestamp(string $value): string
     {
-        return (new \DateTimeImmutable($value))
+        return new \DateTimeImmutable($value)
             ->setTimezone(new \DateTimeZone('UTC'))
             ->format(SyncLimits::TIMESTAMP_FORMAT);
     }

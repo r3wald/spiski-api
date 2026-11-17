@@ -44,8 +44,7 @@ final class AdminController
         private readonly AdminDeleter $deleter,
         private readonly AdminConfirmation $confirmation,
         private readonly ClockInterface $clock,
-    ) {
-    }
+    ) {}
 
     #[Route('/admin', name: 'admin_page', methods: ['GET'])]
     public function page(Request $request): Response
@@ -55,7 +54,14 @@ final class AdminController
 
         // Die Eintraege jeder Liste gehoeren zur Seite (aufklappbar); archivierte nur auf Wunsch.
         $html = $this->renderer->render(
-            $this->reader->read($limit, $offset, !$filter->hideDeletedLists, $filter->query, true, $filter->showArchivedItems),
+            $this->reader->read(
+                $limit,
+                $offset,
+                !$filter->hideDeletedLists,
+                $filter->query,
+                true,
+                $filter->showArchivedItems,
+            ),
             $filter,
             isset(AdminPageRenderer::NOTICES[$notice]) ? $notice : null,
         );
@@ -66,7 +72,12 @@ final class AdminController
     /**
      * Erster Schritt beim Loeschen: zeigt den Eintrag und fragt nach. Aendert nichts.
      */
-    #[Route('/admin/items/{id}/delete', name: 'admin_item_delete_confirm', requirements: ['id' => self::UUID], methods: ['GET'])]
+    #[Route(
+        '/admin/items/{id}/delete',
+        name: 'admin_item_delete_confirm',
+        requirements: ['id' => self::UUID],
+        methods: ['GET'],
+    )]
     public function confirmDeleteItem(Request $request, string $id): Response
     {
         $id = strtolower($id);
@@ -84,14 +95,19 @@ final class AdminController
     /**
      * Zweiter Schritt: nur mit dem Bestaetigungstoken der Seite oben.
      */
-    #[Route('/admin/items/{id}/delete', name: 'admin_item_delete', requirements: ['id' => self::UUID], methods: ['POST'])]
+    #[Route(
+        '/admin/items/{id}/delete',
+        name: 'admin_item_delete',
+        requirements: ['id' => self::UUID],
+        methods: ['POST'],
+    )]
     public function deleteItem(Request $request, string $id): Response
     {
         return $this->confirmedDelete(
             $request,
             strtolower($id),
             self::DELETE_ITEM,
-            fn (string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteItem($id, $now),
+            fn(string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteItem($id, $now),
             ['deleted', 'already-deleted'],
         );
     }
@@ -100,7 +116,12 @@ final class AdminController
      * Erster Schritt beim Loeschen einer Liste: zeigt sie mit Eintraegen und Teilnehmern
      * und fragt nach. Aendert nichts.
      */
-    #[Route('/admin/lists/{id}/delete', name: 'admin_list_delete_confirm', requirements: ['id' => self::UUID], methods: ['GET'])]
+    #[Route(
+        '/admin/lists/{id}/delete',
+        name: 'admin_list_delete_confirm',
+        requirements: ['id' => self::UUID],
+        methods: ['GET'],
+    )]
     public function confirmDeleteList(Request $request, string $id): Response
     {
         $id = strtolower($id);
@@ -115,14 +136,19 @@ final class AdminController
         ));
     }
 
-    #[Route('/admin/lists/{id}/delete', name: 'admin_list_delete', requirements: ['id' => self::UUID], methods: ['POST'])]
+    #[Route(
+        '/admin/lists/{id}/delete',
+        name: 'admin_list_delete',
+        requirements: ['id' => self::UUID],
+        methods: ['POST'],
+    )]
     public function deleteList(Request $request, string $id): Response
     {
         return $this->confirmedDelete(
             $request,
             strtolower($id),
             self::DELETE_LIST,
-            fn (string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteList($id, $now),
+            fn(string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteList($id, $now),
             ['list-deleted', 'list-already-deleted'],
         );
     }
@@ -134,8 +160,13 @@ final class AdminController
      * @param callable(string, \DateTimeImmutable): bool $delete  true = geloescht, false = war schon geloescht
      * @param array{0: string, 1: string}                 $notices Hinweis nach dem Loeschen bzw. wenn nichts zu tun war
      */
-    private function confirmedDelete(Request $request, string $id, string $action, callable $delete, array $notices): Response
-    {
+    private function confirmedDelete(
+        Request $request,
+        string $id,
+        string $action,
+        callable $delete,
+        array $notices,
+    ): Response {
         [$filter, $limit, $offset] = $this->pageState($request);
         $now = $this->clock->now();
 
@@ -148,12 +179,17 @@ final class AdminController
 
         $token = $request->request->getString('confirm');
         if (!$this->confirmation->isValid($token, $action, $id, $now)) {
-            throw ApiProblemException::forbidden('Bestaetigung fehlt oder ist abgelaufen. Bitte auf der Admin-Seite erneut "Loeschen" waehlen.');
+            throw ApiProblemException::forbidden(
+                'Bestaetigung fehlt oder ist abgelaufen. Bitte auf der Admin-Seite erneut "Loeschen" waehlen.',
+            );
         }
 
         $notice = $delete($id, $now) ? $notices[0] : $notices[1];
 
-        $response = new RedirectResponse('/admin?'.$this->renderer->pageQuery($filter, $limit, $offset).'&notice='.$notice, Response::HTTP_SEE_OTHER);
+        $response = new RedirectResponse(
+            '/admin?' . $this->renderer->pageQuery($filter, $limit, $offset) . '&notice=' . $notice,
+            Response::HTTP_SEE_OTHER,
+        );
         $this->hardenResponse($response);
 
         return $response;
@@ -229,7 +265,10 @@ final class AdminController
         // getString() lehnt Arrays (q[]=x) selbst mit 400 ab.
         $value = trim($request->query->getString('q'));
         if (mb_strlen($value) > AdminPageLimits::MAX_QUERY_LENGTH) {
-            throw ApiProblemException::unprocessable(\sprintf('"q" darf hoechstens %d Zeichen lang sein.', AdminPageLimits::MAX_QUERY_LENGTH));
+            throw ApiProblemException::unprocessable(\sprintf(
+                '"q" darf hoechstens %d Zeichen lang sein.',
+                AdminPageLimits::MAX_QUERY_LENGTH,
+            ));
         }
 
         return $value;
@@ -243,7 +282,12 @@ final class AdminController
 
         $value = filter_var($request->query->get($name), \FILTER_VALIDATE_INT);
         if (false === $value || $value < $min || $value > $max) {
-            throw ApiProblemException::unprocessable(\sprintf('"%s" muss eine ganze Zahl zwischen %d und %d sein.', $name, $min, $max));
+            throw ApiProblemException::unprocessable(\sprintf(
+                '"%s" muss eine ganze Zahl zwischen %d und %d sein.',
+                $name,
+                $min,
+                $max,
+            ));
         }
 
         return $value;

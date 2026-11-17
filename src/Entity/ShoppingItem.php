@@ -108,8 +108,13 @@ class ShoppingItem
      * Uebernimmt eine gewonnene Push-Zeile. `$list` wird mitgegeben, weil ein
      * Artikel per LWW auch in eine andere Liste verschoben werden kann.
      */
-    public function apply(ItemChange $change, ShoppingList $list, int $serverVersion, Uuid $clientId, Uuid $userId): void
-    {
+    public function apply(
+        ItemChange $change,
+        ShoppingList $list,
+        int $serverVersion,
+        Uuid $clientId,
+        Uuid $userId,
+    ): void {
         $this->list = $list;
         // Ein Artikel zaehlt immer zum Besitzer seiner Liste – auch wenn ihn ein
         // Mitglied einer geteilten Liste angelegt hat (Kontingent, CLAUDE.md 12).

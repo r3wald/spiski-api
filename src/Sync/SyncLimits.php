@@ -57,7 +57,5 @@ final class SyncLimits
     /** ISO-8601 in UTC mit Millisekunden, z. B. 2026-08-21T14:03:11.482Z. */
     public const TIMESTAMP_FORMAT = 'Y-m-d\TH:i:s.v\Z';
 
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 }
