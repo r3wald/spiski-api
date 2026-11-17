@@ -6,6 +6,7 @@
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/
+/public/*.apk
 /var/
 /vendor/
 ###< symfony/framework-bundle ###
@@ -26,6 +27,9 @@ phpstan.neon
 /public/spiski.json
 # Web-App (`make build-web` im App-Projekt), ebenfalls separat auf den Server.
 /public/app/
+# Admin-Oberflaeche: Quellen in admin/, Build-Ergebnis (`make admin-build`) wird deployt.
+/public/admin/
+/admin/node_modules/
 ###< spiski ###
 
 ###> spiski prod ###

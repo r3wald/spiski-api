@@ -4,260 +4,176 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Admin\AdminConfirmation;
 use App\Admin\AdminDeleter;
+use App\Admin\AdminListQuery;
 use App\Admin\AdminListReader;
-use App\Admin\AdminPageFilter;
 use App\Admin\AdminPageLimits;
-use App\Admin\AdminPageRenderer;
 use App\Exception\ApiProblemException;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Admin-Zugang: `/admin` (HTML-Seite), `/admin/items/{id}/delete` und
- * `/admin/lists/{id}/delete` (Eintrag bzw. Liste loeschen, mit Bestaetigung) und
- * `/v1/admin/lists` (JSON).
+ * JSON-Schnittstelle der Admin-Oberflaeche (Vue-App unter `/admin/`, Quellen in
+ * `admin/`, statisch von Caddy ausgeliefert):
+ *
+ * - `GET /v1/admin/lists` – Listen aller Accounts, gefiltert, sortiert, seitenweise
+ * - `GET /v1/admin/lists/{id}` – eine Liste mit allen Eintraegen
+ * - `DELETE /v1/admin/lists/{id}`, `DELETE /v1/admin/items/{id}` – Tombstone wie in der App
  *
  * Alle sind nur mit `Authorization: Bearer <ADMIN_TOKEN>` erreichbar, und zwar bei
- * jedem Request – es gibt kein Anmeldeformular, keine Session und kein Cookie. Alle
- * sind bewusst nicht in der OpenAPI-Spezifikation (siehe `areas` in nelmio_api_doc.yaml):
- * sie sind kein Teil des Vertrags mit der App.
+ * jedem Request – es gibt keine Session und kein Cookie. Alle sind bewusst nicht in der
+ * OpenAPI-Spezifikation (siehe `areas` in nelmio_api_doc.yaml): sie sind kein Teil des
+ * Vertrags mit der App.
  */
 final class AdminController
 {
-    /** Die HTML-Seite zeigt kleinere Seiten als die JSON-Schnittstelle. */
-    private const PAGE_DEFAULT_LIMIT = 50;
-
-    private const DELETE_ITEM = 'delete-item';
-    private const DELETE_LIST = 'delete-list';
-
     private const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+
+    /** Altersfilter in Tagen; 100 Jahre reichen. */
+    private const MAX_AGE_DAYS = 36_500;
 
     public function __construct(
         private readonly AdminListReader $reader,
-        private readonly AdminPageRenderer $renderer,
         private readonly AdminDeleter $deleter,
-        private readonly AdminConfirmation $confirmation,
         private readonly ClockInterface $clock,
     ) {}
-
-    #[Route('/admin', name: 'admin_page', methods: ['GET'])]
-    public function page(Request $request): Response
-    {
-        [$filter, $limit, $offset] = $this->pageState($request);
-        $notice = $request->query->getString('notice');
-
-        // Die Eintraege jeder Liste gehoeren zur Seite (aufklappbar); archivierte nur auf Wunsch.
-        $html = $this->renderer->render(
-            $this->reader->read(
-                $limit,
-                $offset,
-                !$filter->hideDeletedLists,
-                $filter->query,
-                true,
-                $filter->showArchivedItems,
-            ),
-            $filter,
-            isset(AdminPageRenderer::NOTICES[$notice]) ? $notice : null,
-        );
-
-        return $this->htmlResponse($html);
-    }
-
-    /**
-     * Erster Schritt beim Loeschen: zeigt den Eintrag und fragt nach. Aendert nichts.
-     */
-    #[Route(
-        '/admin/items/{id}/delete',
-        name: 'admin_item_delete_confirm',
-        requirements: ['id' => self::UUID],
-        methods: ['GET'],
-    )]
-    public function confirmDeleteItem(Request $request, string $id): Response
-    {
-        $id = strtolower($id);
-        [$filter, $limit, $offset] = $this->pageState($request);
-
-        $data = $this->reader->item($id) ?? throw ApiProblemException::notFound('Eintrag nicht gefunden.');
-
-        return $this->htmlResponse($this->renderer->renderDeleteConfirmation(
-            $data,
-            $this->renderer->pageQuery($filter, $limit, $offset),
-            $this->confirmation->issue(self::DELETE_ITEM, $id, $this->clock->now()),
-        ));
-    }
-
-    /**
-     * Zweiter Schritt: nur mit dem Bestaetigungstoken der Seite oben.
-     */
-    #[Route(
-        '/admin/items/{id}/delete',
-        name: 'admin_item_delete',
-        requirements: ['id' => self::UUID],
-        methods: ['POST'],
-    )]
-    public function deleteItem(Request $request, string $id): Response
-    {
-        return $this->confirmedDelete(
-            $request,
-            strtolower($id),
-            self::DELETE_ITEM,
-            fn(string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteItem($id, $now),
-            ['deleted', 'already-deleted'],
-        );
-    }
-
-    /**
-     * Erster Schritt beim Loeschen einer Liste: zeigt sie mit Eintraegen und Teilnehmern
-     * und fragt nach. Aendert nichts.
-     */
-    #[Route(
-        '/admin/lists/{id}/delete',
-        name: 'admin_list_delete_confirm',
-        requirements: ['id' => self::UUID],
-        methods: ['GET'],
-    )]
-    public function confirmDeleteList(Request $request, string $id): Response
-    {
-        $id = strtolower($id);
-        [$filter, $limit, $offset] = $this->pageState($request);
-
-        $list = $this->reader->list($id) ?? throw ApiProblemException::notFound('Liste nicht gefunden.');
-
-        return $this->htmlResponse($this->renderer->renderListDeleteConfirmation(
-            $list,
-            $this->renderer->pageQuery($filter, $limit, $offset),
-            $this->confirmation->issue(self::DELETE_LIST, $id, $this->clock->now()),
-        ));
-    }
-
-    #[Route(
-        '/admin/lists/{id}/delete',
-        name: 'admin_list_delete',
-        requirements: ['id' => self::UUID],
-        methods: ['POST'],
-    )]
-    public function deleteList(Request $request, string $id): Response
-    {
-        return $this->confirmedDelete(
-            $request,
-            strtolower($id),
-            self::DELETE_LIST,
-            fn(string $id, \DateTimeImmutable $now): bool => $this->deleter->deleteList($id, $now),
-            ['list-deleted', 'list-already-deleted'],
-        );
-    }
-
-    /**
-     * Gemeinsamer zweiter Schritt: Herkunft und Bestaetigungstoken pruefen, loeschen,
-     * zurueck zur Uebersicht (Post/Redirect/Get), damit ein Neuladen nichts erneut abschickt.
-     *
-     * @param callable(string, \DateTimeImmutable): bool $delete  true = geloescht, false = war schon geloescht
-     * @param array{0: string, 1: string}                 $notices Hinweis nach dem Loeschen bzw. wenn nichts zu tun war
-     */
-    private function confirmedDelete(
-        Request $request,
-        string $id,
-        string $action,
-        callable $delete,
-        array $notices,
-    ): Response {
-        [$filter, $limit, $offset] = $this->pageState($request);
-        $now = $this->clock->now();
-
-        // Zweite Schutzschicht gegen CSRF neben dem Token: Browser melden, von wo das
-        // Formular kam. curl schickt den Header nicht und braucht dann nur das Token.
-        $site = $request->headers->get('Sec-Fetch-Site');
-        if (null !== $site && 'same-origin' !== $site) {
-            throw ApiProblemException::forbidden('Loeschen ist nur ueber die Admin-Seite selbst moeglich.');
-        }
-
-        $token = $request->request->getString('confirm');
-        if (!$this->confirmation->isValid($token, $action, $id, $now)) {
-            throw ApiProblemException::forbidden(
-                'Bestaetigung fehlt oder ist abgelaufen. Bitte auf der Admin-Seite erneut "Loeschen" waehlen.',
-            );
-        }
-
-        $notice = $delete($id, $now) ? $notices[0] : $notices[1];
-
-        $response = new RedirectResponse(
-            '/admin?' . $this->renderer->pageQuery($filter, $limit, $offset) . '&notice=' . $notice,
-            Response::HTTP_SEE_OTHER,
-        );
-        $this->hardenResponse($response);
-
-        return $response;
-    }
 
     #[Route('/v1/admin/lists', name: 'v1_admin_lists', methods: ['GET'])]
     public function lists(Request $request): JsonResponse
     {
-        $limit = $this->intParameter($request, 'limit', AdminPageLimits::DEFAULT_LIMIT, 1, AdminPageLimits::MAX_LIMIT);
-        $offset = $this->intParameter($request, 'offset', 0, 0, AdminPageLimits::MAX_OFFSET);
-        $includeDeleted = $request->query->getBoolean('includeDeleted', true);
-
-        $response = new JsonResponse($this->reader->read(
-            $limit,
-            $offset,
-            $includeDeleted,
-            $this->queryParameter($request),
-            $request->query->getBoolean('includeItems'),
-            $request->query->getBoolean('includeArchivedItems'),
-        ));
-        $this->hardenResponse($response);
-
-        return $response;
+        return $this->json($this->reader->read($this->listQuery($request)));
     }
 
     /**
-     * Filter und Position der Admin-Seite aus dem Query-String; die Loeschseiten reichen
-     * sie durch, damit es danach auf derselben Ansicht weitergeht.
-     *
-     * @return array{0: AdminPageFilter, 1: int, 2: int}
+     * Alle Listen-Eigentuemer (Kuerzel mit Zahl der Listen) fuer den Eigentuemer-Filter.
      */
-    private function pageState(Request $request): array
+    #[Route('/v1/admin/owners', name: 'v1_admin_owners', methods: ['GET'])]
+    public function owners(): JsonResponse
     {
-        return [
-            new AdminPageFilter(
-                query: $this->queryParameter($request),
-                hideDeletedLists: $request->query->getBoolean('hideDeleted'),
-                showArchivedItems: $request->query->getBoolean('archivedItems'),
-                expandItems: $request->query->getBoolean('open'),
-            ),
-            $this->intParameter($request, 'limit', self::PAGE_DEFAULT_LIMIT, 1, AdminPageLimits::MAX_LIMIT),
-            $this->intParameter($request, 'offset', 0, 0, AdminPageLimits::MAX_OFFSET),
-        ];
+        return $this->json(['owners' => $this->reader->owners()]);
     }
 
-    private function htmlResponse(string $html): Response
+    #[Route('/v1/admin/lists/{id}', name: 'v1_admin_list', requirements: ['id' => self::UUID], methods: ['GET'])]
+    public function list(string $id): JsonResponse
     {
-        $response = new Response($html);
-        $response->headers->set('Content-Type', 'text/html; charset=utf-8');
-        // Kein Skript, keine fremden Ressourcen, Formulare nur an dieselbe Seite.
-        $response->headers->set(
-            'Content-Security-Policy',
-            "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-        );
-        $this->hardenResponse($response);
+        $list = $this->reader->detail(strtolower($id)) ?? throw ApiProblemException::notFound('Liste nicht gefunden.');
 
-        return $response;
+        return $this->json($list);
+    }
+
+    /**
+     * Loescht eine Liste wie der Besitzer in der App (AdminDeleter). `result` ist
+     * `deleted` oder `already-deleted` (nichts geaendert).
+     */
+    #[Route(
+        '/v1/admin/lists/{id}',
+        name: 'v1_admin_list_delete',
+        requirements: ['id' => self::UUID],
+        methods: ['DELETE'],
+    )]
+    public function deleteList(Request $request, string $id): JsonResponse
+    {
+        $this->assertSameOrigin($request);
+        $deleted = $this->deleter->deleteList(strtolower($id), $this->clock->now());
+
+        return $this->json(['result' => $deleted ? 'deleted' : 'already-deleted']);
+    }
+
+    /**
+     * Archiviert einen Eintrag wie in der App. `result` wie bei Listen.
+     */
+    #[Route(
+        '/v1/admin/items/{id}',
+        name: 'v1_admin_item_delete',
+        requirements: ['id' => self::UUID],
+        methods: ['DELETE'],
+    )]
+    public function deleteItem(Request $request, string $id): JsonResponse
+    {
+        $this->assertSameOrigin($request);
+        $deleted = $this->deleter->deleteItem(strtolower($id), $this->clock->now());
+
+        return $this->json(['result' => $deleted ? 'deleted' : 'already-deleted']);
+    }
+
+    /**
+     * Schutz gegen CSRF: Ein HTML-Formular kann kein DELETE schicken, und ein
+     * fremdes `fetch()` mit DELETE scheitert am CORS-Preflight. Zusaetzlich lehnen
+     * wir Browser-Anfragen ab, die nicht von derselben Seite kommen – relevant,
+     * falls eine Header-Erweiterung das Token automatisch anhaengt. curl schickt
+     * den Header nicht und braucht nur das Token.
+     */
+    private function assertSameOrigin(Request $request): void
+    {
+        $site = $request->headers->get('Sec-Fetch-Site');
+        if (null !== $site && 'same-origin' !== $site) {
+            throw ApiProblemException::forbidden('Loeschen ist nur ueber die Admin-Oberflaeche selbst moeglich.');
+        }
+    }
+
+    private function listQuery(Request $request): AdminListQuery
+    {
+        $status = $this->enumParameter($request, 'status', AdminListQuery::STATUSES, AdminListQuery::STATUS_ALL);
+        // Aeltere Form: includeDeleted=0 blendet geloeschte Listen aus.
+        if (!$request->query->has('status') && !$request->query->getBoolean('includeDeleted', true)) {
+            $status = AdminListQuery::STATUS_ACTIVE;
+        }
+
+        $owner = strtolower(trim($request->query->getString('owner')));
+        if ('' !== $owner && 1 !== preg_match('/^[0-9a-f]{1,12}$/', $owner)) {
+            throw ApiProblemException::unprocessable(
+                '"owner" muss der Anfang eines Account-Kuerzels sein (1-12 Hex-Zeichen).',
+            );
+        }
+
+        $encryption = $this->enumParameter($request, 'encryption', ['', ...AdminListQuery::ENCRYPTION_STATES], '');
+
+        $now = $this->clock->now();
+        $minAge = $this->optionalIntParameter($request, 'minAgeDays', 0, self::MAX_AGE_DAYS);
+        $maxAge = $this->optionalIntParameter($request, 'maxAgeDays', 0, self::MAX_AGE_DAYS);
+
+        return new AdminListQuery(
+            limit: $this->intParameter(
+                $request,
+                'limit',
+                AdminPageLimits::DEFAULT_LIMIT,
+                1,
+                AdminPageLimits::MAX_LIMIT,
+            ),
+            offset: $this->intParameter($request, 'offset', 0, 0, AdminPageLimits::MAX_OFFSET),
+            status: $status,
+            query: $this->queryParameter($request),
+            owner: $owner,
+            encryption: '' === $encryption ? null : $encryption,
+            ageField: $this->enumParameter(
+                $request,
+                'ageField',
+                AdminListQuery::AGE_FIELDS,
+                AdminListQuery::AGE_CREATED,
+            ),
+            olderThan: null === $minAge ? null : $now->modify(\sprintf('-%d days', $minAge)),
+            newerThan: null === $maxAge ? null : $now->modify(\sprintf('-%d days', $maxAge)),
+            sort: $this->enumParameter($request, 'sort', AdminListQuery::SORTS, 'updatedAt'),
+            direction: $this->enumParameter($request, 'dir', AdminListQuery::DIRECTIONS, 'desc'),
+            includeItems: $request->query->getBoolean('includeItems'),
+            includeArchivedItems: $request->query->getBoolean('includeArchivedItems'),
+        );
     }
 
     /**
      * Enthaelt Daten aller Nutzer: weder Browser noch Zwischenstationen sollen sie behalten
      * oder per Referer weitergeben.
      */
-    private function hardenResponse(Response $response): void
+    private function json(mixed $data): JsonResponse
     {
+        $response = new JsonResponse($data);
         $response->headers->set('Cache-Control', 'no-store');
         $response->headers->set('X-Robots-Tag', 'noindex, nofollow');
         $response->headers->set('Referrer-Policy', 'no-referrer');
+
+        return $response;
     }
 
     private function queryParameter(Request $request): string
@@ -272,6 +188,36 @@ final class AdminController
         }
 
         return $value;
+    }
+
+    /**
+     * @param list<string> $allowed
+     */
+    private function enumParameter(Request $request, string $name, array $allowed, string $default): string
+    {
+        if (!$request->query->has($name)) {
+            return $default;
+        }
+
+        $value = $request->query->getString($name);
+        if (!\in_array($value, $allowed, true)) {
+            throw ApiProblemException::unprocessable(\sprintf(
+                '"%s" muss einer dieser Werte sein: %s.',
+                $name,
+                implode(', ', array_map(static fn(string $v): string => '' === $v ? '(leer)' : $v, $allowed)),
+            ));
+        }
+
+        return $value;
+    }
+
+    private function optionalIntParameter(Request $request, string $name, int $min, int $max): ?int
+    {
+        if ('' === $request->query->getString($name)) {
+            return null;
+        }
+
+        return $this->intParameter($request, $name, $min, $min, $max);
     }
 
     private function intParameter(Request $request, string $name, int $default, int $min, int $max): int

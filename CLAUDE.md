@@ -190,8 +190,8 @@ Vergleich der eingehenden Zeile mit dem Serverstand derselben `id`:
 
 - Die `accountId` wird als `Authorization: Bearer <uuid>` gesendet. Es gibt kein Passwort, keinen Refresh-Token – die UUID **ist** das Secret. Die `clientId` ist kein Secret und dient ausschließlich als Tiebreaker.
 - Ein Custom Symfony Security-Authenticator liest den Bearer-Token, validiert das UUID-Format und legt bei erstem Kontakt automatisch einen `User`-Datensatz an (kein Registrierungs-Endpoint nötig).
-- Die Admin-Seite (`GET /admin`, serverseitig gerendertes HTML, und `GET /v1/admin/lists`, JSON) nutzt ein eigenes Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: kein Formular, keine Session, kein Cookie, kein JavaScript, ein Token in der URL wird nicht akzeptiert. Eigene Firewall, IP-Limit 30/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel. Gezeigt werden Listen und ihre Einträge (archivierte nur auf Wunsch) als Nutzerinhalt sowie je Liste, ob sie geteilt ist und wie viele Konten (Besitzer + Mitglieder) sie sehen dürfen – nie der Teilen-Code, nur ob er aktiv ist.
-- **Einträge und Listen löschen von der Admin-Seite** (`App\Admin\AdminDeleter`): zweistufig, ohne JavaScript – `GET /admin/items/{id}/delete` bzw. `/admin/lists/{id}/delete` zeigt die Bestätigung, erst der `POST` von dort löscht. Eine Liste bekommt wie in der App nur selbst den Tombstone (Artikel, Mitgliedschaften und Teilen-Code bleiben; der Besitzer kann sie aus dem Archiv der App wiederherstellen). Gelöscht wird als **Tombstone** wie in der App, nie hart (eine hart gelöschte Zeile legte der nächste Push wieder an): exklusive `SyncLock`, Kontozeilen der Zielgruppe sperren, neue Version in jedem Konto der Liste (`VersionPublisher`), `updated_at = deleted_at` strikt nach dem bisherigen Stand, `last_client_id` = `ffffffff-…` (gewinnt Gleichstände), bei Artikeln `last_user_id = NULL` (kein `changedByOther`), Live-Update nach dem Commit. **CSRF:** Header-Erweiterungen hängen das Admin-Token auch an Formulare fremder Seiten. Deshalb braucht der `POST` ein Bestätigungstoken von der Bestätigungsseite (`App\Admin\AdminConfirmation`: HMAC über Aktion, Ziel und Ablauf mit `APP_SECRET`, 1 h gültig) und wird bei `Sec-Fetch-Site` ≠ `same-origin` abgelehnt.
+- Die **Admin-Oberfläche** (`/admin/`) ist eine eigenständige Vue-Anwendung (Quellen `admin/`, Build `public/admin/`, von Caddy statisch ausgeliefert, keine Symfony-Integration). Ihre Daten holt sie von `/v1/admin` mit eigenem Token (`ADMIN_TOKEN`, ≥ 32 Zeichen; leer = abgeschaltet) im `Authorization: Bearer`-Header **bei jedem Request**: keine Session, kein Cookie, ein Token in der URL wird nicht akzeptiert. Die App fragt das Token ab und hält es nur im `sessionStorage` des Tabs; Schutz gegen XSS ist die strenge CSP auf `/admin/*` (nur `'self'`, kein Inline-Code) plus Vues Text-Escaping (kein `v-html`). Eigene Firewall (`^/v1/admin`), IP-Limit 120/Minute. Sie liefert **nie** Account-UUIDs (das Zugangs-Secret der Nutzer), nur ein gehashtes Kürzel. Gezeigt werden Listen und ihre Einträge als Nutzerinhalt sowie je Liste, ob sie geteilt ist und wie viele Konten (Besitzer + Mitglieder) sie sehen dürfen – nie der Teilen-Code, nur ob er aktiv ist. Übersicht mit Sortierung und Filtern (Status, Eigentümer, Verschlüsselung, Alter) serverseitig in `App\Admin\AdminListReader` (`AdminListQuery`; Sortierschlüssel nur aus einer festen Liste, nie aus dem Request in SQL), Detailseite über `GET /v1/admin/lists/{id}`.
+- **Einträge und Listen löschen** (`App\Admin\AdminDeleter`): `DELETE /v1/admin/items/{id}` bzw. `/v1/admin/lists/{id}`, nach einem Bestätigungsdialog in der Oberfläche; Antwort `{"result": "deleted" | "already-deleted"}`. Eine Liste bekommt wie in der App nur selbst den Tombstone (Artikel, Mitgliedschaften und Teilen-Code bleiben; der Besitzer kann sie aus dem Archiv der App wiederherstellen). Gelöscht wird als **Tombstone** wie in der App, nie hart (eine hart gelöschte Zeile legte der nächste Push wieder an): exklusive `SyncLock`, Kontozeilen der Zielgruppe sperren, neue Version in jedem Konto der Liste (`VersionPublisher`), `updated_at = deleted_at` strikt nach dem bisherigen Stand, `last_client_id` = `ffffffff-…` (gewinnt Gleichstände), bei Artikeln `last_user_id = NULL` (kein `changedByOther`), Live-Update nach dem Commit. **CSRF:** Header-Erweiterungen hängen das Admin-Token auch an Anfragen fremder Seiten. Deshalb nur `DELETE` (kein HTML-Formular kann es, ein fremdes `fetch` scheitert am CORS-Preflight) und Ablehnung bei `Sec-Fetch-Site` ≠ `same-origin`.
 - Da der Besitz der UUID vollen Zugriff gewährt, ist Transportsicherheit Pflicht: nur HTTPS, HSTS.
 - Kein Logging von UUIDs im Klartext in Applikationslogs (nur gehasht, falls überhaupt), um das Risiko bei Log-Leaks zu minimieren.
 
@@ -236,10 +236,11 @@ Die UUID + synchronisierte Listendaten sind einer Person zuordenbar und gelten d
 | `POST` | `/v1/me/encryption/commit` | ja | Umstellung abschließen |
 | `GET` | `/v1/health` | nein | Health-Check (App-Status + DB-Erreichbarkeit) |
 | `GET` | `/status.json`, `/status.html` | nein | Statusseite: API-Version, Revision, DB, Schema, Summen über alle Konten. IP-Limit 60/Minute. Nicht in der OpenAPI-Spezifikation |
-| `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON. Nicht in der OpenAPI-Spezifikation |
-| `GET` | `/admin` | Admin-Token | Dieselben Daten als HTML-Seite. Nicht in der OpenAPI-Spezifikation |
-| `GET`, `POST` | `/admin/items/{id}/delete` | Admin-Token (+ Bestätigungstoken) | Eintrag löschen: GET zeigt die Bestätigung, POST archiviert. Nicht in der OpenAPI-Spezifikation |
-| `GET`, `POST` | `/admin/lists/{id}/delete` | Admin-Token (+ Bestätigungstoken) | Liste löschen, ebenso. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/v1/admin/lists` | Admin-Token | Alle Listen aller Accounts als JSON, gefiltert, sortiert, seitenweise. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/v1/admin/lists/{id}` | Admin-Token | Eine Liste mit allen Einträgen. Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/v1/admin/owners` | Admin-Token | Alle Listen-Eigentümer (Kürzel, Listenzahl) für den Eigentümer-Filter. Nicht in der OpenAPI-Spezifikation |
+| `DELETE` | `/v1/admin/lists/{id}`, `/v1/admin/items/{id}` | Admin-Token | Liste bzw. Eintrag löschen (Tombstone). Nicht in der OpenAPI-Spezifikation |
+| `GET` | `/admin/` | nein | Admin-Oberfläche (Vue), statisch (`public/admin/`, Build aus `admin/`), ohne Daten. Nicht in der OpenAPI-Spezifikation |
 | `GET` | `/datenschutz/` | nein | Datenschutzerklärung, statisch (`public/datenschutz/index.html`), von FrankenPHP ohne PHP ausgeliefert. Nicht in der OpenAPI-Spezifikation |
 
 ### Fehlerformat
@@ -280,11 +281,10 @@ api/
     php/php.dev.ini, php.prod.ini
   src/
     Admin/
-      AdminListReader.php      // Lese-Abfrage für die Admin-Seite (DBAL)
-      AdminPageRenderer.php    // HTML der Admin-Seite, ohne JavaScript
+      AdminListReader.php      // Lese-Abfragen für die Admin-Oberfläche (DBAL): Übersicht, Detail
+      AdminListQuery.php       // Filter, Sortierung, Seitenfenster der Übersicht
       AdminPageLimits.php
       AdminDeleter.php         // Eintrag/Liste löschen (Tombstone, Versionen für alle Teilnehmer)
-      AdminConfirmation.php    // Bestätigungstoken gegen CSRF (HMAC, befristet)
     Command/
       PurgePlaintextCommand.php   // app:purge-plaintext, Frist-Job (Abschnitt 14)
     Controller/
@@ -325,7 +325,12 @@ api/
       SyncResponseSerializer.php
       SyncLimits.php           // alle harten Grenzen an einer Stelle
       Dto/
+  admin/                       // Admin-Oberfläche: Vue 3 + Vue Router + TypeScript, Vite 6 (Node 18 im Image)
+    src/api.ts                 // fetch auf /v1/admin, Token im sessionStorage
+    src/filters.ts             // Filter/Sortierung <-> URL-Query <-> API-Parameter
+    src/views/                 // ListsView (Übersicht), ListDetailView (Detail, Löschen)
   public/
+    admin/                     // Build der Admin-Oberfläche (make admin-build), nicht im Repo
     index.html, robots.txt     // statische Startseite, von FrankenPHP ohne PHP ausgeliefert
     datenschutz/index.html     // Datenschutzerklärung, ebenfalls statisch
   tests/
@@ -338,7 +343,7 @@ api/
   update-prod.sh, update-staging.sh  // Deployment per rsync/ssh, je Server-Umgebung eins
   Dockerfile                   // Stages: base, dev, prod
   mago.toml                    // Mago-Konfiguration; Bestand in mago-lint-baseline.toml, mago-analysis-baseline.toml
-  Makefile                     // make check = mago (fmt-check, lint, analyze) + stan + test + openapi-check
+  Makefile                     // make check = mago (fmt-check, lint, analyze) + stan + test + openapi-check + admin-check
 ```
 
 Betriebshinweise stehen in `README.md`.
@@ -526,7 +531,7 @@ Der Server soll von den Listen nur Chiffretext halten. Verschlüsselt wird auf d
 
 ### Auswirkungen
 
-- **Admin-Seite:** verschlüsselte Zeilen zeigen „🔒 verschlüsselt"; der Namensfilter sieht nur Klartext-Konten. Zusätzlich zeigt sie je Konto den Zustand (`plaintext`, `migrating`, `encrypted`), im JSON als `encryptionState` je Liste; so sieht man vor Ablauf der Frist, wer noch nicht migriert hat.
+- **Admin-Oberfläche:** verschlüsselte Zeilen zeigen „🔒 verschlüsselt"; der Namensfilter sieht nur Klartext-Konten. Zusätzlich zeigt sie je Konto den Zustand (`plaintext`, `migrating`, `encrypted`), im JSON als `encryptionState` je Liste, und filtert danach (`encryption=`); so sieht man vor Ablauf der Frist, wer noch nicht migriert hat.
 - **Statusseite:** Zähler je Konto-Zustand.
 - Der Server kann Längen und Typen der verschlüsselten Felder nicht mehr prüfen (Validierung nur noch in der App).
 

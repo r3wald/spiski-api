@@ -594,11 +594,18 @@ final class EncryptionTest extends ApiTestCase
             'Kein Chiffretext im Admin-JSON.',
         );
 
-        $this->client->request('GET', '/admin?open=1', server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN]);
-        $html = (string) $this->client->getResponse()->getContent();
-        self::assertStringContainsString('🔒 verschlüsselt', $html);
-        self::assertStringContainsString('Klartextliste', $html);
-        self::assertStringContainsString('unverschlüsselt', $html);
+        $plain = array_values(array_filter($page['lists'], static fn(array $l): bool => !$l['encrypted']));
+        self::assertSame('Klartextliste', $plain[0]['name']);
+        self::assertSame('plaintext', $plain[0]['encryptionState']);
+
+        // Detailseite: dieselben Regeln.
+        $this->client->request('GET', '/v1/admin/lists/' . $listId, server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN,
+        ]);
+        self::assertSame(200, $this->httpStatus());
+        $detail = (string) $this->client->getResponse()->getContent();
+        self::assertStringNotContainsString('v1.', $detail, 'Kein Chiffretext im Admin-JSON.');
+        self::assertStringContainsString('"encrypted":true', $detail);
     }
 
     public function testStatusCountsAccountsPerState(): void

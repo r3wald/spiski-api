@@ -49,12 +49,13 @@ curl -s -X POST localhost:8081/v1/sync \
 | `make fmt` / `make fmt-check` | Code mit Mago formatieren / prüfen, ob er formatiert ist |
 | `make mago` | Alle Mago-Prüfungen (Format, Lint, Analyse) |
 | `make openapi` | `openapi.yaml` neu erzeugen |
-| `make check` | Mago + PHPStan + Tests + OpenAPI-Diff (wie die CI) |
+| `make check` | Mago + PHPStan + Tests + OpenAPI-Diff + Admin-Oberfläche (wie die CI) |
+| `make admin-build` / `admin-dev` / `admin-check` | Admin-Oberfläche bauen / Dev-Server / Typprüfung und Tests, siehe Abschnitt „Admin-Oberfläche“ |
 | `make backup` | Dump der Entwicklungsdatenbank nach `./backups` |
 | `make prod-up` / `prod-migrate` / `prod-backup` | Produktions-Stack, siehe Abschnitt „Server" |
 | `make staging-up` / `staging-migrate` / `staging-backup` | Staging-Stack, dasselbe für Staging |
 
-`make help` listet alles auf. Die PHP-Targets laufen mit `docker compose exec` im laufenden `php`-Container (vorher `make up`), im Container selbst oder in GitLab CI direkt.
+`make help` listet alles auf. Jedes Target funktioniert auf dem Host und im Container. Auf dem Host laufen die PHP-Targets per `docker compose exec` im `php`-Container und starten den Stack vorher selbst (`make up`, wartet bis alle Dienste healthy sind); im Container selbst oder in GitLab CI laufen sie direkt, `up` ist dort ein No-op. Targets, die Docker steuern (`build`, `down`, `logs`, `prod-*`, `staging-*`), brechen im Container mit einem Hinweis ab.
 
 ### Mago
 
@@ -82,10 +83,9 @@ curl -s -X POST localhost:8081/v1/sync \
 | `GET` | `/v1/health` | – |
 | `GET` | `/status.json`, `/status.html` | – (Statusseite, siehe unten) |
 | `GET` | `/` | – |
-| `GET` | `/admin` | Admin-Token im Header (HTML-Seite) |
-| `GET`, `POST` | `/admin/items/{id}/delete` | Admin-Token im Header; `POST` zusätzlich Bestätigungstoken (Eintrag löschen) |
-| `GET`, `POST` | `/admin/lists/{id}/delete` | wie oben (ganze Liste löschen) |
-| `GET` | `/v1/admin/lists` | Admin-Token |
+| `GET` | `/admin/` | nein (statische Vue-App, ohne Daten) |
+| `GET` | `/v1/admin/lists`, `/v1/admin/lists/{id}`, `/v1/admin/owners` | Admin-Token |
+| `DELETE` | `/v1/admin/lists/{id}`, `/v1/admin/items/{id}` | Admin-Token (Liste bzw. Eintrag löschen) |
 
 `/` liefert eine statische Startseite (`public/index.html`, dazu `public/robots.txt`). FrankenPHP liefert sie direkt aus, ohne PHP – siehe `handle /` in `docker/frankenphp/Caddyfile` und `Caddyfile.prod`. Alle anderen Pfade außerhalb von `/v1` landen weiterhin bei Symfony und ergeben dort einen 404.
 
@@ -98,7 +98,7 @@ Die vollständige Beschreibung liegt als [openapi.yaml](openapi.yaml) im Repo un
 | `DATABASE_URL` | PostgreSQL-DSN |
 | `APP_ENV` | `dev`, `test` oder `prod` |
 | `APP_SECRET` | Symfony-Secret |
-| `ADMIN_TOKEN` | Token für die Admin-Seite, mindestens 32 Zeichen. Leer oder kürzer = Admin-Zugang abgeschaltet |
+| `ADMIN_TOKEN` | Token für die Admin-Oberfläche, mindestens 32 Zeichen. Leer oder kürzer = Admin-Zugang abgeschaltet |
 | `SPISKI_CLOCK_SKEW_TOLERANCE` | Sekunden, die ein `updatedAt` in der Zukunft liegen darf, bevor der Server es kappt (Default 300) |
 | `SPISKI_ENCRYPTION_DEADLINE` | Frist für die Umstellung auf Verschlüsselung, ISO-Datum (z. B. `2027-01-31T00:00:00Z`); leer = keine Frist. Erst setzen, wenn die App mit Verschlüsselung veröffentlicht ist – siehe „Verschlüsselung“ |
 
@@ -124,46 +124,88 @@ HTTP-Status ist `503` bei `down`, sonst `200` – ein externer Monitor muss nur 
 
 `/v1/health` bleibt der schlanke Check für den Container-Healthcheck.
 
-## Admin-Seite
+## Admin-Oberfläche
 
-`/admin` zeigt im Browser alle Listen aller Accounts: Name und Farbe, Account-Kürzel, **Zugriff** (ob und mit wie vielen Nutzern die Liste geteilt ist), Einträge (aktiv / gesamt), letzte Änderung (UTC) und Status. Unter jeder Liste klappen **ihre Einträge** auf (Menge, Einheit, Name wie in der App; dazu Notiz sowie die Kennzeichen *erledigt*, *verschoben* und *archiviert*). **Archivierte** (gelöschte) Einträge sind standardmäßig ausgeblendet und lassen sich einblenden; die Zusammenfassung nennt ihre Zahl. Die Seite lässt sich nach Listenname oder Account-Kürzel filtern, gelöschte Listen lassen sich ausblenden, und sie ist seitenweise blätterbar. Sie wird serverseitig als reines HTML gerendert: **ohne JavaScript, ohne Formular zur Anmeldung, ohne Session und ohne Cookie.**
+`/admin/` ist eine eigenständige **Vue-Anwendung** (Vue 3, Vue Router, TypeScript, Vite) ohne Symfony-Integration. Die Quellen liegen in `admin/`, der Build landet in `public/admin/` und wird von Caddy statisch ausgeliefert (ohne PHP). Ihre Daten holt sie über die JSON-Schnittstelle `/v1/admin`.
 
-**Das Token wird bei jedem Request mitgeschickt**, im Header:
+- **Übersicht** aller Listen aller Accounts: Name und Farbe, Account-Kürzel und Verschlüsselungszustand des Kontos, **Zugriff** (ob und mit wie vielen Nutzern geteilt), Einträge (aktiv / gesamt), Erstellt, Geändert (lokale Zeit, dazu das Alter) und Status.
+- **Sortierung** per Klick auf die Spaltenköpfe (Liste, Account, Zugriff, Einträge, Erstellt, Geändert; erneuter Klick dreht die Richtung). Verschlüsselte Listen stehen beim Sortieren nach Namen immer am Ende.
+- **Filter:** Suche (Listenname oder Account-Kürzel), **Status** (alle / aktiv / gelöscht), **Eigentümer** (Drop-down mit allen Accounts, denen eine Liste gehört, samt Zahl ihrer Listen; ein Klick auf ein Kürzel in der Tabelle setzt den Filter ebenfalls), Verschlüsselung des Kontos und **Alter** (jünger als 1/7/30 Tage, älter als 30/90/365 Tage), gemessen an der Erstellung oder der letzten Änderung.
+- Filter, Sortierung und Seite stehen in der URL: Neuladen, Zurück und Links auf eine gefilterte Ansicht funktionieren.
+- **Detailseite** je Liste (`/admin/lists/{id}`): alle Felder, Zahl der Listen desselben Accounts (mit Link auf die gefilterte Übersicht), Teilen-Zustand und alle Einträge (Menge, Einheit, Name wie in der App, Notiz, *erledigt*, *verschoben*; **archivierte** lassen sich einblenden).
+- **Löschen** von Listen und Einträgen auf der Detailseite, nach Bestätigung im Dialog (siehe unten).
+
+### Entwickeln und bauen
+
+Node und npm bringt das Docker-Image mit (Debian bookworm, Node 18 – deshalb Vite 6). Die Targets laufen im `php`-Container:
+
+| Befehl | Zweck |
+|---|---|
+| `make admin-build` | Abhängigkeiten installieren (nur bei geändertem `package-lock.json`), Typprüfung, Build nach `public/admin/` |
+| `make admin-dev` | Vite-Dev-Server mit Hot Reload: `http://localhost:5173/admin/`; `/v1` geht an Caddy im selben Container |
+| `make admin-check` | Typprüfung (`vue-tsc`) und Unit-Tests (Vitest); Teil von `make check` |
+| `make admin-install` | `npm ci` erzwingen |
+
+`public/admin/` und `admin/node_modules/` stehen nicht im Repo. `update-prod.sh`/`update-staging.sh` bauen die Oberfläche vor dem Deployment (`make up admin-build`) und kopieren `public/admin/` mit `rsync --delete` auf den Server; dort kommt sie wie die Web-App über den Bind-Mount von `public/` in den Container, das Image enthält sie nicht.
+
+### Anmeldung
+
+Die Oberfläche fragt beim ersten Aufruf nach dem **Admin-Token** und schickt es bei jeder Anfrage im Header mit:
 
 ```
 Authorization: Bearer <ADMIN_TOKEN>
 ```
 
-Fehlt der Header oder stimmt das Token nicht, antwortet `/admin` mit `401` (Problem-Details-JSON mit dem Hinweis auf den Header). Ein Token in der URL (`?token=…`) wird **bewusst nicht akzeptiert**: URLs landen in Server-Logs, im Browserverlauf und im Referer.
+Das Token liegt nur im `sessionStorage` des Tabs (weg mit dem Schließen, „Abmelden“ löscht es sofort), nie in einem Cookie und nie in der URL (`?token=…` wird **bewusst nicht akzeptiert**: URLs landen in Server-Logs, im Browserverlauf und im Referer). Gegen XSS schützt eine strenge Content-Security-Policy auf `/admin/*` (nur eigene Skripte und Styles, kein Inline-Code, keine fremden Ressourcen, `connect-src 'self'`); Nutzertexte setzt Vue ausschließlich als Text, nie als HTML. Eine Header-Erweiterung wie *ModHeader* funktioniert weiterhin; dann entfällt die Anmeldung (URL-Filter auf die eigene Domain setzen, sonst geht das Token an jede Website).
 
-**Im Browser** braucht es dafür eine Erweiterung, die einen Request-Header setzt, z. B. *ModHeader* (Chrome/Firefox): Header `Authorization` mit dem Wert `Bearer <ADMIN_TOKEN>`. **Unbedingt einen URL-Filter auf `https://spiski.r3wald.net/*` setzen**, sonst schickt die Erweiterung das Token an jede Website, die du besuchst. Ohne Erweiterung zeigt der Browser nur das `401`. Per Kommandozeile:
+Per Kommandozeile:
 
 ```bash
-curl -H "Authorization: Bearer $ADMIN_TOKEN" https://spiski.r3wald.net/admin          # HTML
-curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin/lists?q=milch"   # JSON
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin/lists?status=active&sort=name&dir=asc"
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin/lists/<list-id>"
+curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" "https://spiski.r3wald.net/v1/admin/items/<item-id>"
 ```
 
-| Parameter | Wirkung | `/admin` | `/v1/admin/lists` |
-|-----------|---------|:--------:|:-----------------:|
-| `q` | Teilstring des Listennamens (ohne Groß-/Kleinschreibung) **oder** Anfang eines Account-Kürzels; `%` und `_` gelten wörtlich | ja | ja |
-| `hideDeleted=1` | gelöschte Listen ausblenden | ja | – |
-| `includeDeleted=0` | gelöschte Listen ausblenden | – | ja |
-| `archivedItems=1` | archivierte (gelöschte) Einträge mit anzeigen | ja | – |
-| `open=1` | Einträge aufgeklappt darstellen | ja | – |
-| `includeItems=1` | die Einträge jeder Liste unter `items` mitliefern | – | ja |
-| `includeArchivedItems=1` | dabei auch archivierte Einträge (nur zusammen mit `includeItems=1`) | – | ja |
-| `limit`, `offset` | Seitengröße (Standard 50 bzw. 100, höchstens 500) und Versatz | ja | ja |
+### JSON-Schnittstelle
 
-**Zugriff / Teilen.** Die Spalte zeigt, ob eine Liste geteilt ist (mindestens ein Mitglied, wie auf der Statusseite) und wie viele Nutzer sie sehen dürfen, **Besitzer + Mitglieder**: „geteilt · 3 Nutzer, Besitzer + 2 Mitglieder". Ist ein Teilen-Code aktiv, aber noch niemand beigetreten, steht dort „Code aktiv, noch niemand beigetreten" (noch nicht geteilt, 1 Nutzer). Der Code selbst wird **nie** angezeigt: Wer ihn kennt, kann der Liste beitreten. Im JSON stehen dazu pro Liste `shared`, `memberCount` (ohne Besitzer), `userCount` (Besitzer + Mitglieder) und `shareCodeActive`.
+| Methode | Pfad | Antwort |
+|---|---|---|
+| `GET` | `/v1/admin/lists` | `{total, ownerCount, limit, offset, lists: [...]}` |
+| `GET` | `/v1/admin/owners` | `{owners: [{owner, encryptionState, listCount, activeListCount}]}`: alle Accounts mit mindestens einer Liste (gelöschte eingeschlossen), nach Kürzel sortiert |
+| `GET` | `/v1/admin/lists/{id}` | eine Liste mit `ownerListCount` und allen Einträgen (`items`, archivierte eingeschlossen); `404`, wenn unbekannt |
+| `DELETE` | `/v1/admin/lists/{id}` | `{"result": "deleted"}` oder `{"result": "already-deleted"}`; `404`, wenn unbekannt |
+| `DELETE` | `/v1/admin/items/{id}` | ebenso für einen Eintrag |
 
-**Einträge und Listen löschen.** Jeder nicht archivierte Eintrag und jede nicht gelöschte Liste (Spalte *Status*) hat einen Link **Löschen**. Er führt auf eine Bestätigungsseite (`GET /admin/items/{id}/delete`). Sie zeigt den Eintrag bzw. die Liste (mit Zahl der Einträge), das Account-Kürzel und wie viele Nutzer betroffen sind, und ändert noch nichts. Erst **„Ja, … löschen“** schickt das Formular ab (`POST`; für Listen `/admin/lists/{id}/delete`). Danach geht es zurück zur Übersicht mit demselben Filter, und ein Hinweis bestätigt das Löschen.
+Parameter von `GET /v1/admin/lists` (ungültige Werte: `422`):
+
+| Parameter | Wirkung |
+|-----------|---------|
+| `q` | Teilstring des Listennamens (ohne Groß-/Kleinschreibung, nur unverschlüsselte Listen) **oder** Anfang eines Account-Kürzels; `%` und `_` gelten wörtlich; höchstens 100 Zeichen |
+| `status` | `all` (Standard), `active`, `deleted`. Ältere Form: `includeDeleted=0` = `active` |
+| `owner` | Anfang des Account-Kürzels, 1–12 Hex-Zeichen |
+| `encryption` | Zustand des Besitzerkontos: `plaintext`, `migrating`, `encrypted` |
+| `minAgeDays`, `maxAgeDays` | nur Listen, die mindestens bzw. höchstens so viele Tage alt sind (0–36500, leer = ohne Grenze) |
+| `ageField` | Bezug des Alters: `created` (Standard) oder `updated` (letzte Änderung) |
+| `sort` | `updatedAt` (Standard), `createdAt`, `name`, `owner`, `items` (aktive Einträge), `users` (Mitglieder) |
+| `dir` | `desc` (Standard) oder `asc` |
+| `includeItems=1` | die Einträge jeder Liste unter `items` mitliefern |
+| `includeArchivedItems=1` | dabei auch archivierte Einträge |
+| `limit`, `offset` | Seitengröße (Standard 100, höchstens 500; die Oberfläche nimmt 50) und Versatz |
+
+**Zugriff / Teilen.** Geteilt heißt: mindestens ein Mitglied (wie auf der Statusseite). Zugriff haben **Besitzer + Mitglieder**: „geteilt · 3 Nutzer, Besitzer + 2 Mitglieder". Ist ein Teilen-Code aktiv, aber noch niemand beigetreten, steht dort „Code aktiv, noch niemand beigetreten". Der Code selbst wird **nie** ausgeliefert: Wer ihn kennt, kann der Liste beitreten. Im JSON stehen dazu pro Liste `shared`, `memberCount` (ohne Besitzer), `userCount` (Besitzer + Mitglieder) und `shareCodeActive`.
+
+### Einträge und Listen löschen
+
+Auf der Detailseite haben die Liste (solange nicht gelöscht) und jeder nicht archivierte Eintrag einen Knopf **Löschen**. Er öffnet einen Bestätigungsdialog, der die Wirkung und die Zahl der betroffenen Nutzer nennt; erst **„Ja, … löschen“** schickt `DELETE /v1/admin/lists/{id}` bzw. `/v1/admin/items/{id}`.
 
 - **Wirkung wie in der App:** Der Eintrag wird archiviert (Tombstone), nicht hart entfernt, und verschwindet beim nächsten Sync auf allen Geräten aller Nutzer der Liste – bei geteilten Listen also auch bei den Mitgliedern. Geöffnete Apps erfahren es sofort per Live-Update. Ein hartes Löschen ginge nicht: Das nächste Gerät mit dem alten Stand würde den Eintrag per Sync wieder anlegen.
 - **Gegen Wiederauferstehung:** Der Tombstone ist immer neuer als der bisherige Stand. Ein Gerät, das seinen alten Stand erneut schickt, verliert den Last-Write-Wins-Vergleich und bekommt den Tombstone zurück. Ändert ein Nutzer den Eintrag danach in der App, gilt wie immer die spätere Änderung.
 - **Listen** werden wie in der App gelöscht: Nur die Liste bekommt den Tombstone, ihre Einträge bleiben unverändert und verschwinden mit ihr. Der Besitzer findet sie danach im **Archiv** der App und kann sie wiederherstellen. Mitgliedschaften und Teilen-Code bleiben; nach einer Wiederherstellung sehen die Mitglieder sie wieder.
 - **Verschlüsselte Einträge und Listen** lassen sich genauso löschen; der Chiffretext bleibt unberührt.
-- **Schutz gegen fremde Formulare (CSRF):** Eine Header-Erweiterung schickt das Admin-Token bei *jeder* Anfrage an die Domain mit, auch bei einem Formular, das eine fremde Website abschickt. Deshalb verlangt der `POST` ein Bestätigungstoken, das nur auf der Bestätigungsseite steht (HMAC mit `APP_SECRET`, eine Stunde gültig, an Aktion und Eintrag bzw. Liste gebunden). Zusätzlich lehnt er Browser-Anfragen ab, deren `Sec-Fetch-Site` nicht `same-origin` ist. Fehlt das Token oder ist es abgelaufen: `403`, nichts geändert.
-- Doppelt abgeschickt (Neuladen, Zurück-Taste): Eintrag bzw. Liste sind schon gelöscht, es passiert nichts mehr.
+- **Schutz gegen fremde Seiten (CSRF):** Löschen geht nur per `DELETE`. Ein HTML-Formular kann das nicht, und ein fremdes `fetch()` scheitert am CORS-Preflight. Zusätzlich lehnt der Server Browser-Anfragen ab, deren `Sec-Fetch-Site` nicht `same-origin` ist (`403`) – wichtig, falls eine Header-Erweiterung das Token an jede Anfrage hängt. curl schickt den Header nicht und braucht nur das Token.
+- Doppelt abgeschickt: `already-deleted`, es passiert nichts mehr.
+
+### Token, Datenschutz, Grenzen
 
 Token erzeugen und wechseln:
 
@@ -172,11 +214,11 @@ openssl rand -hex 32      # als ADMIN_TOKEN in .env.prod (Produktion) bzw. .env.
 make prod-restart         # danach neu starten
 ```
 
-Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt `401` (dieselbe Meldung wie bei einem falschen Token).
+Ist `ADMIN_TOKEN` leer oder kürzer als 32 Zeichen, ist der Zugang abgeschaltet und jede Anfrage ergibt `401` (dieselbe Meldung wie bei einem falschen Token). Die Oberfläche selbst ist öffentlich abrufbar, enthält aber keine Daten.
 
-**Datenschutz.** Die Seite zeigt Listennamen, Einträge und Notizen und damit Nutzerinhalt, aber keine Account-UUID: Sie ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Alle Nutzertexte (Listennamen) werden HTML-escaped. Die Antworten sind `no-store`, tragen `Referrer-Policy: no-referrer` und eine Content-Security-Policy ohne Skripte. Die Seite macht personenbezogene Daten sichtbar: nur mit dem Token zugänglich halten und nicht weitergeben.
+**Datenschutz.** Die Oberfläche zeigt Listennamen, Einträge und Notizen und damit Nutzerinhalt, aber keine Account-UUID: Sie ist das Zugangs-Secret der Nutzer und wird deshalb nie ausgeliefert, sondern nur ein 12-stelliges Kürzel (SHA-256 der UUID), mit dem sich Listen demselben Account zuordnen lassen. Alle Antworten sind `no-store` und tragen `Referrer-Policy: no-referrer`. Nur mit dem Token zugänglich halten und nicht weitergeben.
 
-**Missbrauchsschutz.** Höchstens 30 Anfragen pro Minute und IP an `/admin` und `/v1/admin` (auch erfolgreiche); danach `429` mit `Retry-After`. Die Admin-Endpunkte stehen bewusst nicht in `openapi.yaml`.
+**Missbrauchsschutz.** Höchstens 120 Anfragen pro Minute und IP an `/v1/admin` (auch erfolgreiche); danach `429` mit `Retry-After`. Die Oberfläche fragt bei jedem Filterwechsel neu (die Suche erst nach einer kurzen Tipp-Pause). Die Admin-Endpunkte stehen bewusst nicht in `openapi.yaml`.
 
 ## Server (Produktion und Staging)
 

@@ -84,3 +84,25 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           shellcheck bin/backup.sh
+
+  admin:
+    name: Admin-Oberflaeche (Typpruefung, Tests, Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@v4
+
+      # Dieselbe Hauptversion wie im Container (Debian bookworm), damit kein Paket
+      # durchrutscht, das dort nicht laeuft.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - run: npm ci --no-fund --no-audit
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

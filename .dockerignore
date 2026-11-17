@@ -35,3 +35,8 @@ docker/frankenphp/
 public/*.apk
 public/spiski.json
 public/app/
+
+# Admin-Oberflaeche: Quellen und node_modules braucht das Image nicht, der Build
+# kommt wie public/app per Bind-Mount von public/.
+admin/
+public/admin/

@@ -31,6 +31,13 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   exit 1
 fi
 
+# Admin-Oberflaeche lokal bauen (npm im Dev-Container), damit public/admin zum Code passt.
+make up admin-build
+if [[ ! -f public/admin/index.html ]]; then
+  echo "update: public/admin/index.html fehlt - Build der Admin-Oberflaeche fehlgeschlagen." >&2
+  exit 1
+fi
+
 # Code, compose.prod.yaml, Makefile, bin/backup.sh und die Env-Datei dieser Stage
 # (Rechte 600 bleiben erhalten). vendor/ wird nicht kopiert: composer install laeuft
 # beim Image-Bau.
@@ -42,7 +49,13 @@ rsync -av ./ "${HOST}:${REMOTE_DIR}/" \
   --exclude=backups \
   --exclude='*.md' \
   --exclude='update-*.sh' \
+  --exclude=/admin/ \
+  --exclude=/public/admin/ \
   --exclude="${OTHER_ENV}"
+
+# Admin-Oberflaeche separat und mit --delete: Vite erzeugt Dateinamen mit Hash, alte
+# Builds sollen nicht liegen bleiben.
+rsync -av --delete public/admin/ "${HOST}:${REMOTE_DIR}/public/admin/"
 
 # Code-Stand fuer /status.json und /status.html (App\Status\BuildInfo). Landet ueber
 # "COPY . ." im Image. Nicht im Repo; "-dirty" = mit uncommitteten Aenderungen deployt.
@@ -52,10 +65,6 @@ if [[ -n "${REVISION}" && -n "$(git status --porcelain 2>/dev/null)" ]]; then
 fi
 printf '{"revision": "%s", "deployedAt": "%s"}\n' "${REVISION}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   | ssh "${HOST}" "cat > ${REMOTE_DIR}/build-info.json"
-
-# rsync loescht nichts: Reste der frueheren statischen Admin-Seite (public/admin/) wuerde
-# Caddy sonst weiter ausliefern. /admin kommt jetzt aus PHP.
-ssh "${HOST}" "rm -rf ${REMOTE_DIR}/public/admin"
 
 # Reihenfolge: Image bauen, Schema migrieren, Stack aktualisieren, php + caddy neu starten.
 # Migriert wird vor dem Start des neuen Codes, damit er nie auf einem alten Schema laeuft.

@@ -23,10 +23,12 @@ framework:
             interval: '1 hour'
 
         # Pro IP, fuer jede Anfrage an /v1/admin (auch erfolgreiche). Bremst das
-        # Raten des Admin-Tokens; das Token selbst ist ein langes Zufalls-Secret.
+        # Raten des Admin-Tokens; das Token selbst ist ein langes Zufalls-Secret
+        # (>= 32 Zeichen), Raten ist damit auch bei 120/Minute aussichtslos. Die
+        # Vue-Oberflaeche fragt bei jedem Filterwechsel neu, 30 waeren zu knapp.
         admin:
             policy: sliding_window
-            limit: 30
+            limit: 120
             interval: '1 minute'
 
         # Pro IP, fuer /status.json und /status.html. Die Seiten sind oeffentlich und

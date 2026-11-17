@@ -11,7 +11,7 @@ RUN install-php-extensions pdo_pgsql intl opcache zip apcu
 
 # postgresql-client wird von bin/backup.sh und den Test-Fixtures gebraucht.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git unzip postgresql-client \
+ && apt-get install -y --no-install-recommends git unzip postgresql-client nodejs npm \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer

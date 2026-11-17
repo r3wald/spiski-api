@@ -9,8 +9,8 @@ use App\Tests\Support\RecordingHub;
 use Symfony\Component\Mercure\Update;
 
 /**
- * Eintraege von der Admin-Seite aus loeschen: zweistufig (Bestaetigungsseite, dann
- * POST mit Bestaetigungstoken) und als Tombstone, der bei allen Teilnehmern ankommt.
+ * Eintraege ueber die Admin-Schnittstelle loeschen (`DELETE /v1/admin/items/{id}`): als
+ * Tombstone, der bei allen Teilnehmern ankommt.
  */
 final class AdminItemDeletionTest extends ApiTestCase
 {
@@ -51,87 +51,33 @@ final class AdminItemDeletionTest extends ApiTestCase
         RecordingHub::$updates = [];
     }
 
-    public function testOverviewOffersDeleteOnlyForActiveItems(): void
+    public function testDeleteNeedsTheAdminToken(): void
     {
-        $html = $this->adminHtml('/admin?archivedItems=1&q=woche');
+        $this->client->request('DELETE', '/v1/admin/items/' . $this->itemId);
 
-        self::assertStringContainsString(
-            'href="/admin/items/' . $this->itemId . '/delete?limit=50&amp;offset=0&amp;q=woche&amp;archivedItems=1"',
-            $html,
-        );
-        self::assertStringNotContainsString('/admin/items/' . $this->archivedId . '/delete', $html);
-    }
-
-    public function testConfirmationPageNeedsTheAdminToken(): void
-    {
-        $this->client->request('GET', '/admin/items/' . $this->itemId . '/delete');
-        self::assertSame(401, $this->client->getResponse()->getStatusCode());
-
-        $this->client->request('POST', '/admin/items/' . $this->itemId . '/delete', ['confirm' => 'x']);
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
         self::assertNull($this->deletedAt($this->itemId));
     }
 
-    public function testConfirmationPageShowsTheItemAndChangesNothing(): void
+    public function testRequestFromAnotherSiteIsRejectedEvenWithTheToken(): void
     {
-        $html = $this->adminHtml('/admin/items/' . $this->itemId . '/delete?q=woche');
-
-        self::assertStringContainsString('Diesen Eintrag wirklich löschen?', $html);
-        self::assertStringContainsString('1 St Hafermilch', $html);
-        self::assertStringContainsString('Wocheneinkauf', $html);
-        self::assertStringContainsString(
-            'method="post" action="/admin/items/' . $this->itemId . '/delete?limit=50&amp;offset=0&amp;q=woche"',
-            $html,
-        );
-        self::assertStringContainsString('href="/admin?limit=50&amp;offset=0&amp;q=woche">Abbrechen', $html);
-        self::assertStringContainsString(
-            "form-action 'self'",
-            (string) $this->client->getResponse()->headers->get('Content-Security-Policy'),
-        );
-        self::assertStringContainsString(
-            'no-store',
-            (string) $this->client->getResponse()->headers->get('Cache-Control'),
-        );
-
-        self::assertNull($this->deletedAt($this->itemId), 'Die Bestaetigungsseite allein loescht nichts.');
-        self::assertSame([], RecordingHub::$updates);
-    }
-
-    public function testDeleteWithoutConfirmationIsForbidden(): void
-    {
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', []);
-        self::assertSame(403, $this->client->getResponse()->getStatusCode());
-
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', [
-            'confirm' => '9999999999.' . str_repeat('0', 64),
-        ]);
-        self::assertSame(403, $this->client->getResponse()->getStatusCode());
+        // Eine Header-Erweiterung haengt das Token auch an fremde Anfragen.
+        foreach (['cross-site', 'same-site', 'none'] as $site) {
+            $this->adminDelete('/v1/admin/items/' . $this->itemId, $site);
+            self::assertSame(403, $this->client->getResponse()->getStatusCode(), $site);
+        }
 
         self::assertNull($this->deletedAt($this->itemId));
     }
 
-    public function testConfirmationOfAnotherItemDoesNotCount(): void
+    public function testPostIsNotAccepted(): void
     {
-        $other = self::uuid();
-        $this->sync($this->owner, [
-            'since' => 0,
-            'clientId' => self::uuid(),
-            'changes' => ['items' => [self::itemRow($other, $this->listId, '2026-02-01T10:00:03.000Z')]],
+        // Ein HTML-Formular kann nur GET und POST: beides loescht nichts.
+        $this->client->request('POST', '/v1/admin/items/' . $this->itemId, server: [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN,
         ]);
 
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', ['confirm' => $this->confirmToken($other)]);
-
-        self::assertSame(403, $this->client->getResponse()->getStatusCode());
-        self::assertNull($this->deletedAt($this->itemId));
-    }
-
-    public function testFormFromAnotherSiteIsRejectedEvenWithAValidToken(): void
-    {
-        $token = $this->confirmToken($this->itemId);
-
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', ['confirm' => $token], 'cross-site');
-
-        self::assertSame(403, $this->client->getResponse()->getStatusCode());
+        self::assertSame(405, $this->client->getResponse()->getStatusCode());
         self::assertNull($this->deletedAt($this->itemId));
     }
 
@@ -146,15 +92,7 @@ final class AdminItemDeletionTest extends ApiTestCase
         ]);
         RecordingHub::$updates = [];
 
-        $this->adminPost(
-            '/admin/items/' . $this->itemId . '/delete?q=woche&open=1',
-            ['confirm' => $this->confirmToken($this->itemId)],
-            'same-origin',
-        );
-
-        $response = $this->client->getResponse();
-        self::assertSame(303, $response->getStatusCode());
-        self::assertSame('/admin?limit=50&offset=0&q=woche&open=1&notice=deleted', $response->headers->get('Location'));
+        self::assertSame('deleted', $this->deleteConfirmed($this->itemId));
         self::assertNotNull($this->deletedAt($this->itemId));
 
         foreach ([$this->owner => $ownerCursor, $member => $memberCursor] as $account => $cursor) {
@@ -178,8 +116,6 @@ final class AdminItemDeletionTest extends ApiTestCase
             [$this->topic($this->owner) => null, $this->topic($member) => null],
             $this->recordedUpdates(),
         );
-
-        self::assertStringContainsString('Der Eintrag wurde gelöscht.', $this->adminHtml('/admin?notice=deleted'));
     }
 
     public function testDeviceWithTheOldStateCannotBringTheItemBack(): void
@@ -229,47 +165,28 @@ final class AdminItemDeletionTest extends ApiTestCase
 
     public function testRepeatedDeleteChangesNothing(): void
     {
-        $token = $this->confirmToken($this->itemId);
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', ['confirm' => $token]);
-        self::assertSame(303, $this->client->getResponse()->getStatusCode());
+        self::assertSame('deleted', $this->deleteConfirmed($this->itemId));
         $version = $this->connection()->fetchOne('SELECT server_version FROM shopping_item WHERE id = :id', [
             'id' => $this->itemId,
         ]);
         RecordingHub::$updates = [];
 
-        // Doppelt abgeschickt (Zurueck-Taste, Neuladen): kein neuer Stand.
-        $this->adminPost('/admin/items/' . $this->itemId . '/delete', ['confirm' => $token]);
+        // Doppelt abgeschickt (Doppelklick, zweiter Tab): kein neuer Stand.
+        self::assertSame('already-deleted', $this->deleteConfirmed($this->itemId));
+        self::assertSame('already-deleted', $this->deleteConfirmed($this->archivedId));
 
-        self::assertSame(303, $this->client->getResponse()->getStatusCode());
-        self::assertStringEndsWith(
-            '&notice=already-deleted',
-            (string) $this->client->getResponse()->headers->get('Location'),
-        );
         self::assertSame($version, $this->connection()->fetchOne('SELECT server_version FROM shopping_item WHERE id = :id', [
             'id' => $this->itemId,
         ]));
         self::assertSame([], RecordingHub::$updates);
     }
 
-    public function testConfirmationPageForAnArchivedItemOffersNoButton(): void
-    {
-        $html = $this->adminHtml('/admin/items/' . $this->archivedId . '/delete');
-
-        self::assertStringContainsString('bereits archiviert', $html);
-        self::assertStringNotContainsString('<form', $html);
-    }
-
     public function testUnknownItemIsNotFound(): void
     {
-        $unknown = self::uuid();
-
-        $this->adminRequest('GET', '/admin/items/' . $unknown . '/delete');
+        $this->adminDelete('/v1/admin/items/' . self::uuid());
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
 
-        $this->adminPost('/admin/items/' . $unknown . '/delete', ['confirm' => $this->confirmTokenFor($unknown)]);
-        self::assertSame(404, $this->client->getResponse()->getStatusCode());
-
-        $this->adminRequest('GET', '/admin/items/kein-uuid/delete');
+        $this->adminDelete('/v1/admin/items/kein-uuid');
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
@@ -308,9 +225,7 @@ final class AdminItemDeletionTest extends ApiTestCase
             (string) $this->client->getResponse()->getContent(),
         );
 
-        self::assertStringContainsString('🔒 verschlüsselt', $this->adminHtml('/admin/items/' . $itemId . '/delete'));
-
-        $this->deleteConfirmed($itemId);
+        self::assertSame('deleted', $this->deleteConfirmed($itemId));
 
         self::assertNotNull($this->deletedAt($itemId));
         self::assertSame($enc, $this->connection()->fetchOne('SELECT enc FROM shopping_item WHERE id = :id', [
@@ -318,72 +233,31 @@ final class AdminItemDeletionTest extends ApiTestCase
         ]));
     }
 
-    public function testUnknownNoticeIsIgnored(): void
-    {
-        $html = $this->adminHtml('/admin?notice=%3Cscript%3E');
-
-        self::assertStringNotContainsString('class="notice"', $html);
-        self::assertStringNotContainsString('<script', $html);
-    }
-
     // --- Helfer -----------------------------------------------------------
 
-    private function deleteConfirmed(string $itemId): void
+    /**
+     * Loescht wie die Admin-Oberflaeche (DELETE von derselben Seite) und gibt `result` zurueck.
+     */
+    private function deleteConfirmed(string $itemId): string
     {
-        $this->adminPost(
-            '/admin/items/' . $itemId . '/delete',
-            ['confirm' => $this->confirmToken($itemId)],
-            'same-origin',
-        );
-        self::assertSame(
-            303,
-            $this->client->getResponse()->getStatusCode(),
-            (string) $this->client->getResponse()->getContent(),
-        );
-    }
-
-    /** Token so, wie der Browser es bekommt: aus der Bestaetigungsseite. */
-    private function confirmToken(string $itemId): string
-    {
-        $html = $this->adminHtml('/admin/items/' . $itemId . '/delete');
-        self::assertSame(1, preg_match('/name="confirm" value="([^"]+)"/', $html, $matches));
-
-        return $matches[1];
-    }
-
-    /** Fuer Eintraege ohne Bestaetigungsseite (unbekannt): direkt erzeugt. */
-    private function confirmTokenFor(string $itemId): string
-    {
-        /** @var \App\Admin\AdminConfirmation $confirmation */
-        $confirmation = static::getContainer()->get(\App\Admin\AdminConfirmation::class);
-
-        return $confirmation->issue('delete-item', $itemId, new \DateTimeImmutable());
-    }
-
-    private function adminHtml(string $path): string
-    {
-        $this->adminRequest('GET', $path);
+        $this->adminDelete('/v1/admin/items/' . $itemId, 'same-origin');
         $response = $this->client->getResponse();
         self::assertSame(200, $response->getStatusCode(), (string) $response->getContent());
+        self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
 
-        return (string) $response->getContent();
+        /** @var array{result: string} $body */
+        $body = json_decode((string) $response->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+
+        return $body['result'];
     }
 
-    private function adminRequest(string $method, string $path): void
-    {
-        $this->client->request($method, $path, server: ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN]);
-    }
-
-    /**
-     * @param array<string, string> $form
-     */
-    private function adminPost(string $path, array $form, ?string $secFetchSite = null): void
+    private function adminDelete(string $path, ?string $secFetchSite = null): void
     {
         $server = ['HTTP_AUTHORIZATION' => 'Bearer ' . self::ADMIN_TOKEN];
         if (null !== $secFetchSite) {
             $server['HTTP_SEC_FETCH_SITE'] = $secFetchSite;
         }
-        $this->client->request('POST', $path, $form, server: $server);
+        $this->client->request('DELETE', $path, server: $server);
     }
 
     private function deletedAt(string $itemId): ?string

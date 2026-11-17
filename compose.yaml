@@ -6,6 +6,8 @@ services:
       target: dev
     ports:
       - "${HTTP_PORT:-8081}:80"
+      # Vite-Dev-Server der Admin-Oberflaeche (make admin-dev), nur bei Bedarf belegt.
+      - "${ADMIN_DEV_PORT:-5173}:5173"
     volumes:
       - .:/app
       - ./docker/frankenphp/Caddyfile:/etc/frankenphp/Caddyfile:ro
@@ -23,6 +25,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Ersetzt den Healthcheck des FrankenPHP-Images (Caddy-Admin auf Port 2019, hier
+    # per `admin off` abgeschaltet, also immer unhealthy). Statische Datei statt
+    # /v1/health: Muss auch ohne vendor/ gruen werden, sonst blockiert
+    # `docker compose up --wait` (make up) ein `make install` nach frischem Clone.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/robots.txt"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+      start_interval: 1s
 
   postgres:
     image: postgres:18-alpine
